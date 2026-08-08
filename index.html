@@ -681,7 +681,7 @@ function App() {
                 ["input", "入力"],
                 ["list", "一覧"],
                 ["summary", "集計"],
-                ["masters", "品目マスタ"],
+                ...(lockedDept ? [] : [["masters", "品目マスタ"]]),
               ].map(([key, label]) => (
                 <button
                   key={key}
@@ -720,7 +720,7 @@ function App() {
               lockedDept={lockedDept}
             />
           )}
-          {tab === "masters" && <MastersTab items={items} onChanged={loadItems} />}
+          {tab === "masters" && !lockedDept && <MastersTab items={items} onChanged={loadItems} />}
         </div>
       </div>
     </div>
@@ -811,7 +811,7 @@ function InputTab({ departments, items, itemByName, sizesByCategory, lockedDept 
         </Field>
         <Field label="部署">
           {isLocked ? (
-            <div className="locked-dept">{shortDeptLabel(lockedDept)}</div>
+            <div className="locked-dept">{lockedDept}</div>
           ) : (
             <select
               value={common.department}
@@ -1124,7 +1124,7 @@ function ListTab({ departments, items, itemByName, sizesByCategory, lockedDept }
       <div className="mb-3 grid grid-cols-2 sm:grid-cols-5 gap-3">
         <Field label="部署">
           {isLocked ? (
-            <div className="locked-dept">{shortDeptLabel(lockedDept)}</div>
+            <div className="locked-dept">{lockedDept}</div>
           ) : (
             <select
               value={filters.department}
@@ -1652,7 +1652,7 @@ function SummaryTab({ departments, lockedDept }) {
         </Field>
         <Field label="部署で絞り込み">
           {isLocked ? (
-            <div className="locked-dept">{shortDeptLabel(lockedDept)}</div>
+            <div className="locked-dept">{lockedDept}</div>
           ) : (
             <select
               value={department}
