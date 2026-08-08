@@ -1587,7 +1587,7 @@ function SummaryTab({ departments, lockedDept }) {
   useEffect(() => {
     setLoading(true);
     setError("");
-    let q = "lending_records?select=department,item_name,quantity,unit_price,record_date";
+    let q = "lending_records?select=department,item_name,person_name,quantity,unit_price,record_date";
     if (department) q += `&department=eq.${encodeURIComponent(department)}`;
     if (itemQuery.trim()) q += `&item_name=ilike.*${encodeURIComponent(itemQuery.trim())}*`;
     if (year !== "all") {
@@ -1624,6 +1624,24 @@ function SummaryTab({ departments, lockedDept }) {
     });
     return Object.values(m).sort((a, b) => b.amount - a.amount);
   }, [rows]);
+
+  const personSummary = useMemo(() => {
+    const m = {};
+    rows.forEach((r) => {
+      const key = r.person_name || "(氏名なし)";
+      if (!m[key]) m[key] = { person_name: key, qty: 0, amount: 0 };
+      m[key].qty += Number(r.quantity || 0);
+      m[key].amount += Number(r.quantity || 0) * Number(r.unit_price || 0);
+    });
+    return Object.values(m).sort((a, b) => b.amount - a.amount);
+  }, [rows]);
+
+  const [personQuery, setPersonQuery] = useState("");
+  const filteredPersonSummary = useMemo(() => {
+    if (!personQuery.trim()) return personSummary;
+    const q = personQuery.trim();
+    return personSummary.filter((r) => r.person_name.includes(q));
+  }, [personSummary, personQuery]);
 
   const clearFilters = () => {
     setYear("all");
@@ -1702,7 +1720,7 @@ function SummaryTab({ departments, lockedDept }) {
       {loading ? (
         <p className="text-sm text-slate-500">集計中...</p>
       ) : (
-        <div className="grid sm:grid-cols-2 gap-6">
+        <div className="grid sm:grid-cols-3 gap-6">
           <div>
             <h2 className="text-sm font-medium text-slate-700 mb-2">部署別集計{department ? "（絞り込み中）" : ""}</h2>
             <div className="border border-slate-200 rounded overflow-hidden">
@@ -1770,6 +1788,45 @@ function SummaryTab({ departments, lockedDept }) {
                     </tr>
                   ))}
                   {itemSummary.length === 0 && (
+                    <tr>
+                      <td colSpan={3} className="px-2 py-4 text-center text-slate-400">
+                        データがありません
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div>
+            <h2 className="text-sm font-medium text-slate-700 mb-2">
+              個人別集計{personQuery.trim() ? "（絞り込み中）" : ""}
+            </h2>
+            <input
+              value={personQuery}
+              onChange={(e) => setPersonQuery(e.target.value)}
+              placeholder="氏名で絞り込む"
+              className="w-full border border-slate-300 rounded px-2 py-1.5 text-sm mb-2"
+            />
+            <div className="border border-slate-200 rounded overflow-hidden max-h-96 overflow-y-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-100 text-slate-600 sticky top-0">
+                  <tr>
+                    <th className="px-2 py-2 text-left">氏名</th>
+                    <th className="px-2 py-2 text-right">数量</th>
+                    <th className="px-2 py-2 text-right">金額</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredPersonSummary.map((r) => (
+                    <tr key={r.person_name} className="border-t border-slate-100">
+                      <td className="px-2 py-1.5">{r.person_name}</td>
+                      <td className="px-2 py-1.5 text-right">{r.qty.toLocaleString()}</td>
+                      <td className="px-2 py-1.5 text-right">¥{yen(r.amount)}</td>
+                    </tr>
+                  ))}
+                  {filteredPersonSummary.length === 0 && (
                     <tr>
                       <td colSpan={3} className="px-2 py-4 text-center text-slate-400">
                         データがありません
