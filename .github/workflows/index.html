@@ -101,6 +101,27 @@ input, select {
   font-size: 14px;
 }
 
+.item-link {
+  color: #b45309;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  text-align: left;
+}
+.item-link:hover {
+  text-decoration-color: #b45309;
+}
+
+.locked-dept {
+  width: 100%;
+  border: 1px solid #fcd34d;
+  background: #fffbeb;
+  color: #92400e;
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
 @media (min-width: 640px) {
   .sm\:grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .sm\:grid-cols-5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
@@ -574,6 +595,11 @@ function yen(n) {
   return v.toLocaleString("ja-JP");
 }
 
+function shortDeptLabel(name) {
+  if (!name) return name;
+  return name.replace(/(課|部)$/, "");
+}
+
 function App() {
   const [tab, setTab] = useState("input");
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -581,6 +607,15 @@ function App() {
   const [items, setItems] = useState([]);
   const [sizeOptions, setSizeOptions] = useState([]);
   const [loadError, setLoadError] = useState("");
+
+  const lockedDept = useMemo(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      return params.get("dept") || "";
+    } catch (e) {
+      return "";
+    }
+  }, []);
 
   const loadItems = useCallback(async () => {
     const i = await sb("items?select=id,item_code,item_name,category,unit_price_excl_tax,unit_price_incl_tax&order=sort_order");
@@ -667,6 +702,7 @@ function App() {
               items={items}
               itemByName={itemByName}
               sizesByCategory={sizesByCategory}
+              lockedDept={lockedDept}
             />
           )}
           {tab === "list" && (
@@ -675,9 +711,15 @@ function App() {
               items={items}
               itemByName={itemByName}
               sizesByCategory={sizesByCategory}
+              lockedDept={lockedDept}
             />
           )}
-          {tab === "summary" && <SummaryTab departments={departments.length ? departments : DEPT_ORDER} />}
+          {tab === "summary" && (
+            <SummaryTab
+              departments={departments.length ? departments : DEPT_ORDER}
+              lockedDept={lockedDept}
+            />
+          )}
           {tab === "masters" && <MastersTab items={items} onChanged={loadItems} />}
         </div>
       </div>
@@ -685,10 +727,11 @@ function App() {
   );
 }
 
-function InputTab({ departments, items, itemByName, sizesByCategory }) {
+function InputTab({ departments, items, itemByName, sizesByCategory, lockedDept }) {
+  const isLocked = !!lockedDept;
   const [common, setCommon] = useState({
     date: todayStr(),
-    department: "",
+    department: lockedDept || "",
     team: "",
     applicant: "",
     inputter: "",
@@ -747,6 +790,7 @@ function InputTab({ departments, items, itemByName, sizesByCategory }) {
       await sb("lending_records", { method: "POST", body: payload });
       setMessage({ type: "success", text: `${validRows.length}件を登録しました。` });
       setRows([emptyRow(), emptyRow(), emptyRow()]);
+      if (isLocked) setCommon((c) => ({ ...c, department: lockedDept }));
     } catch (e) {
       setMessage({ type: "error", text: "登録に失敗しました: " + e.message });
     } finally {
@@ -766,18 +810,22 @@ function InputTab({ departments, items, itemByName, sizesByCategory }) {
           />
         </Field>
         <Field label="部署">
-          <select
-            value={common.department}
-            onChange={(e) => setCommon({ ...common, department: e.target.value })}
-            className="w-full border border-slate-300 rounded px-2 py-1.5 text-sm"
-          >
-            <option value="">選択</option>
-            {departments.map((d) => (
-              <option key={d} value={d}>
-                {d}
-              </option>
-            ))}
-          </select>
+          {isLocked ? (
+            <div className="locked-dept">{lockedDept}</div>
+          ) : (
+            <select
+              value={common.department}
+              onChange={(e) => setCommon({ ...common, department: e.target.value })}
+              className="w-full border border-slate-300 rounded px-2 py-1.5 text-sm"
+            >
+              <option value="">選択</option>
+              {departments.map((d) => (
+                <option key={d} value={d}>
+                  {d}
+                </option>
+              ))}
+            </select>
+          )}
         </Field>
         <Field label="班係">
           <input
@@ -959,11 +1007,12 @@ function Field({ label, children }) {
   );
 }
 
-function ListTab({ departments, items, itemByName, sizesByCategory }) {
+function ListTab({ departments, items, itemByName, sizesByCategory, lockedDept }) {
+  const isLocked = !!lockedDept;
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [filters, setFilters] = useState({ department: "", item: "", from: "", to: "", status: "" });
+  const [filters, setFilters] = useState({ department: lockedDept || "", item: "", from: "", to: "", status: "" });
   const [editingId, setEditingId] = useState(null);
   const [editValues, setEditValues] = useState({});
   const [savingEdit, setSavingEdit] = useState(false);
@@ -1074,18 +1123,22 @@ function ListTab({ departments, items, itemByName, sizesByCategory }) {
     <div>
       <div className="mb-3 grid grid-cols-2 sm:grid-cols-5 gap-3">
         <Field label="部署">
-          <select
-            value={filters.department}
-            onChange={(e) => setFilters({ ...filters, department: e.target.value })}
-            className="w-full border border-slate-300 rounded px-2 py-1.5 text-sm"
-          >
-            <option value="">すべて</option>
-            {departments.map((d) => (
-              <option key={d} value={d}>
-                {d}
-              </option>
-            ))}
-          </select>
+          {isLocked ? (
+            <div className="locked-dept">{lockedDept}</div>
+          ) : (
+            <select
+              value={filters.department}
+              onChange={(e) => setFilters({ ...filters, department: e.target.value })}
+              className="w-full border border-slate-300 rounded px-2 py-1.5 text-sm"
+            >
+              <option value="">すべて</option>
+              {departments.map((d) => (
+                <option key={d} value={d}>
+                  {d}
+                </option>
+              ))}
+            </select>
+          )}
         </Field>
         <Field label="現況">
           <select
@@ -1127,6 +1180,22 @@ function ListTab({ departments, items, itemByName, sizesByCategory }) {
         </Field>
       </div>
 
+      <div className="mb-3">
+        <button
+          onClick={() =>
+            setRows((rs) =>
+              [...rs].sort((a, b) => {
+                if (a.record_date !== b.record_date) return b.record_date.localeCompare(a.record_date);
+                return (b.created_at || "").localeCompare(a.created_at || "");
+              })
+            )
+          }
+          className="border border-slate-300 rounded px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
+        >
+          並べ替え（日付が新しい順）
+        </button>
+      </div>
+
       {error && <p className="text-sm text-red-600 mb-2">読み込みエラー: {error}</p>}
       {loading ? (
         <p className="text-sm text-slate-500">読み込み中...</p>
@@ -1162,6 +1231,7 @@ function ListTab({ departments, items, itemByName, sizesByCategory }) {
                       <select
                         value={editValues.department}
                         onChange={(e) => updateEdit({ department: e.target.value })}
+                        disabled={isLocked}
                         className="w-full border border-slate-200 rounded px-1.5 py-1 text-sm"
                       >
                         <option value=""></option>
@@ -1498,10 +1568,11 @@ function MastersTab({ items, onChanged }) {
   );
 }
 
-function SummaryTab({ departments }) {
+function SummaryTab({ departments, lockedDept }) {
+  const isLocked = !!lockedDept;
   const [years, setYears] = useState([]);
   const [year, setYear] = useState("all");
-  const [department, setDepartment] = useState("");
+  const [department, setDepartment] = useState(lockedDept || "");
   const [itemQuery, setItemQuery] = useState("");
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -1556,11 +1627,11 @@ function SummaryTab({ departments }) {
 
   const clearFilters = () => {
     setYear("all");
-    setDepartment("");
+    setDepartment(lockedDept || "");
     setItemQuery("");
   };
 
-  const hasFilter = year !== "all" || department || itemQuery.trim();
+  const hasFilter = year !== "all" || (!isLocked && department) || itemQuery.trim();
 
   return (
     <div>
@@ -1580,18 +1651,22 @@ function SummaryTab({ departments }) {
           </select>
         </Field>
         <Field label="部署で絞り込み">
-          <select
-            value={department}
-            onChange={(e) => setDepartment(e.target.value)}
-            className="w-full border border-slate-300 rounded px-2 py-1.5 text-sm"
-          >
-            <option value="">すべて</option>
-            {departments.map((d) => (
-              <option key={d} value={d}>
-                {d}
-              </option>
-            ))}
-          </select>
+          {isLocked ? (
+            <div className="locked-dept">{lockedDept}</div>
+          ) : (
+            <select
+              value={department}
+              onChange={(e) => setDepartment(e.target.value)}
+              className="w-full border border-slate-300 rounded px-2 py-1.5 text-sm"
+            >
+              <option value="">すべて</option>
+              {departments.map((d) => (
+                <option key={d} value={d}>
+                  {d}
+                </option>
+              ))}
+            </select>
+          )}
         </Field>
         <Field label="品名で絞り込み">
           <input
@@ -1642,7 +1717,15 @@ function SummaryTab({ departments }) {
                 <tbody>
                   {deptSummary.map((r) => (
                     <tr key={r.department} className="border-t border-slate-100">
-                      <td className="px-2 py-1.5">{r.department}</td>
+                      <td className="px-2 py-1.5">
+                        <button
+                          onClick={() => setDepartment(r.department)}
+                          className="item-link"
+                          title="この部署で絞り込む"
+                        >
+                          {r.department}
+                        </button>
+                      </td>
                       <td className="px-2 py-1.5 text-right">{r.qty.toLocaleString()}</td>
                       <td className="px-2 py-1.5 text-right">¥{yen(r.amount)}</td>
                     </tr>
@@ -1673,7 +1756,15 @@ function SummaryTab({ departments }) {
                 <tbody>
                   {itemSummary.map((r) => (
                     <tr key={r.item_name} className="border-t border-slate-100">
-                      <td className="px-2 py-1.5">{r.item_name}</td>
+                      <td className="px-2 py-1.5">
+                        <button
+                          onClick={() => setItemQuery(r.item_name)}
+                          className="item-link"
+                          title="この品名で絞り込む"
+                        >
+                          {r.item_name}
+                        </button>
+                      </td>
                       <td className="px-2 py-1.5 text-right">{r.qty.toLocaleString()}</td>
                       <td className="px-2 py-1.5 text-right">¥{yen(r.amount)}</td>
                     </tr>
