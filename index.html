@@ -1723,7 +1723,7 @@ function SummaryTab({ departments, lockedDept }) {
         <div className="grid sm:grid-cols-3 gap-6">
           <div>
             <h2 className="text-sm font-medium text-slate-700 mb-2">部署別集計{department ? "（絞り込み中）" : ""}</h2>
-            <div className="border border-slate-200 rounded overflow-hidden">
+            <div className="border border-slate-200 rounded overflow-hidden max-h-96 overflow-y-auto">
               <table className="w-full text-sm">
                 <thead className="bg-slate-100 text-slate-600">
                   <tr>
@@ -1801,8 +1801,16 @@ function SummaryTab({ departments, lockedDept }) {
 
           <div>
             <h2 className="text-sm font-medium text-slate-700 mb-2">
-              個人別集計{personQuery.trim() ? "（絞り込み中）" : ""}
+              個人別集計{personQuery.trim() ? "(絞り込み中)" : ""}
             </h2>
+            {(itemQuery.trim() || (!isLocked && department) || year !== "all") && (
+              <p className="text-xs text-slate-400 mb-2">
+                {[year !== "all" ? `${year}年` : "", !isLocked && department ? department : "", itemQuery.trim() ? `品名「${itemQuery.trim()}」` : ""]
+                  .filter(Boolean)
+                  .join(" / ")}
+                　の範囲で、氏名ごとの数量・金額を表示しています。
+              </p>
+            )}
             <input
               value={personQuery}
               onChange={(e) => setPersonQuery(e.target.value)}
