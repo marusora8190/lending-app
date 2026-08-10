@@ -880,6 +880,7 @@ function InputTab({ departments, items, itemByName, sizesByCategory, lockedDept 
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState(null);
   const [recentItems, setRecentItems] = useState(() => loadRecentItems());
+  const [simpleMode, setSimpleMode] = useState(isLocked);
   const [teamHistory, setTeamHistory] = useState(() => loadHistory(TEAM_HISTORY_KEY));
   const [applicantHistory, setApplicantHistory] = useState(() => loadHistory(APPLICANT_HISTORY_KEY));
   const [inputterHistory, setInputterHistory] = useState(() => loadHistory(INPUTTER_HISTORY_KEY));
@@ -1025,18 +1026,34 @@ function InputTab({ departments, items, itemByName, sizesByCategory, lockedDept 
         </Field>
       </div>
 
+      {isLocked && (
+        <div className="mb-3">
+          <button
+            onClick={() => setSimpleMode((v) => !v)}
+            className={
+              "border rounded px-3 py-1.5 text-sm font-medium " +
+              (simpleMode
+                ? "bg-amber-100 border-amber-400 text-amber-800"
+                : "border-slate-300 text-slate-600 hover:bg-slate-50")
+            }
+          >
+            📱 {simpleMode ? "スマホ表示：ON（かんたん入力）" : "スマホ表示：OFF（すべての項目を表示）"}
+          </button>
+        </div>
+      )}
+
       <div className="overflow-x-auto border border-slate-200 rounded mb-3">
         <table className="w-full text-sm">
           <thead className="bg-slate-100 text-slate-600">
             <tr>
-              <th className="px-2 py-2 text-left w-16">学生</th>
-              <th className="px-2 py-2 text-left w-28">氏名</th>
+              {!simpleMode && <th className="px-2 py-2 text-left w-16">学生</th>}
+              {!simpleMode && <th className="px-2 py-2 text-left w-28">氏名</th>}
               <th className="px-2 py-2 text-left w-28">分類</th>
               <th className="px-2 py-2 text-left w-48">品名</th>
               <th className="px-2 py-2 text-left w-24">サイズ</th>
               <th className="px-2 py-2 text-left w-16">数量</th>
-              <th className="px-2 py-2 text-left w-24">単価</th>
-              <th className="px-2 py-2 text-left w-32">備考</th>
+              {!simpleMode && <th className="px-2 py-2 text-left w-24">単価</th>}
+              {!simpleMode && <th className="px-2 py-2 text-left w-32">備考</th>}
               <th className="w-16"></th>
             </tr>
           </thead>
@@ -1047,20 +1064,24 @@ function InputTab({ departments, items, itemByName, sizesByCategory, lockedDept 
               const itemChoices = sortByRecency(itemsForType(deptFilteredItems, r.itemType), recentItems);
               return (
                 <tr key={r.key} className="border-t border-slate-100">
-                  <td className="px-2 py-1 text-center">
-                    <input
-                      type="checkbox"
-                      checked={r.isStudent}
-                      onChange={(e) => updateRow(r.key, { isStudent: e.target.checked })}
-                    />
-                  </td>
-                  <td className="px-2 py-1">
-                    <input
-                      value={r.personName}
-                      onChange={(e) => updateRow(r.key, { personName: e.target.value })}
-                      className="w-full border border-slate-200 rounded px-1.5 py-1 text-sm"
-                    />
-                  </td>
+                  {!simpleMode && (
+                    <td className="px-2 py-1 text-center">
+                      <input
+                        type="checkbox"
+                        checked={r.isStudent}
+                        onChange={(e) => updateRow(r.key, { isStudent: e.target.checked })}
+                      />
+                    </td>
+                  )}
+                  {!simpleMode && (
+                    <td className="px-2 py-1">
+                      <input
+                        value={r.personName}
+                        onChange={(e) => updateRow(r.key, { personName: e.target.value })}
+                        className="w-full border border-slate-200 rounded px-1.5 py-1 text-sm"
+                      />
+                    </td>
+                  )}
                   <td className="px-2 py-1">
                     <select
                       value={r.itemType}
@@ -1121,21 +1142,25 @@ function InputTab({ departments, items, itemByName, sizesByCategory, lockedDept 
                       className="w-full border border-slate-200 rounded px-1.5 py-1 text-sm"
                     />
                   </td>
-                  <td className="px-2 py-1">
-                    <input
-                      type="number"
-                      value={r.unitPrice}
-                      onChange={(e) => updateRow(r.key, { unitPrice: e.target.value })}
-                      className="w-full border border-slate-200 rounded px-1.5 py-1 text-sm bg-slate-50"
-                    />
-                  </td>
-                  <td className="px-2 py-1">
-                    <input
-                      value={r.note}
-                      onChange={(e) => updateRow(r.key, { note: e.target.value })}
-                      className="w-full border border-slate-200 rounded px-1.5 py-1 text-sm"
-                    />
-                  </td>
+                  {!simpleMode && (
+                    <td className="px-2 py-1">
+                      <input
+                        type="number"
+                        value={r.unitPrice}
+                        onChange={(e) => updateRow(r.key, { unitPrice: e.target.value })}
+                        className="w-full border border-slate-200 rounded px-1.5 py-1 text-sm bg-slate-50"
+                      />
+                    </td>
+                  )}
+                  {!simpleMode && (
+                    <td className="px-2 py-1">
+                      <input
+                        value={r.note}
+                        onChange={(e) => updateRow(r.key, { note: e.target.value })}
+                        className="w-full border border-slate-200 rounded px-1.5 py-1 text-sm"
+                      />
+                    </td>
+                  )}
                   <td className="px-1 py-1 text-center whitespace-nowrap">
                     <button
                       onClick={() => removeRow(r.key)}
