@@ -201,7 +201,6 @@ input, select {
   font-weight: 500;
   border-radius: 6px;
   color: #64748b;
-  border-left: 3px solid transparent;
 }
 .sidebar-btn:hover {
   background: #f1f5f9;
@@ -210,12 +209,9 @@ input, select {
 .sidebar-btn-active {
   background: #fef3c7;
   color: #b45309;
-  border-left: 3px solid #d97706;
 }
-.row-unissued { background: #fffbeb; }
-.row-unissued:hover { background: #fef3c7; }
-.row-pending { background: #fef2f2; }
-.row-pending:hover { background: #fee2e2; }
+.row-applied { background: #fffbeb; }
+.row-applied:hover { background: #fef3c7; }
 .legend-item {
   display: inline-flex;
   align-items: center;
@@ -229,8 +225,7 @@ input, select {
   height: 12px;
   border-radius: 3px;
 }
-.legend-unissued { background: #fffbeb; border: 1px solid #fcd34d; }
-.legend-pending { background: #fef2f2; border: 1px solid #fca5a5; }
+.legend-applied { background: #fffbeb; border: 1px solid #fcd34d; }
 
 @media (max-width: 640px) {
   .app-layout { flex-direction: column; }
@@ -245,7 +240,7 @@ input, select {
     padding-bottom: 8px;
     overflow-x: auto;
   }
-  .sidebar-btn-active { border-left: none; border-bottom: 3px solid #d97706; }
+
 }
 
 </style>
@@ -606,7 +601,7 @@ async function sb(path, options = {}) {
 }
 
 const DEPT_ORDER = ["営繕課", "電気課", "水道課", "造園課", "放送通信課", "建築課", "営繕部"];
-const STATUS_OPTIONS = ["配布済み", "未配布", "納品待ち"];
+const STATUS_OPTIONS = ["申込済", "貸与済"];
 const RECENT_ITEMS_KEY = "lendingApp_recentItems";
 const todayStr = () => new Date().toISOString().slice(0, 10);
 const uid = () => Math.random().toString(36).slice(2, 10);
@@ -703,7 +698,7 @@ function emptyRow() {
     size: "",
     quantity: 1,
     unitPrice: "",
-    status: "配布済み",
+    status: "申込済",
     note: "",
   };
 }
@@ -1283,6 +1278,11 @@ function ListTab({ departments, items, itemByName, sizesByCategory, lockedDept }
   const activeItem = itemByName[editValues.item_name];
   const editSizes = activeItem && activeItem.category ? sizesByCategory[activeItem.category] || [] : [];
 
+  const sortedRows = useMemo(() => {
+    const priority = (r) => (r.status === "申込済" ? 0 : r.status === "貸与済" ? 1 : 2);
+    return [...rows].sort((a, b) => priority(a) - priority(b));
+  }, [rows]);
+
   return (
     <div>
       <div className="mb-3 grid grid-cols-2 sm:grid-cols-5 gap-3">
@@ -1380,7 +1380,7 @@ function ListTab({ departments, items, itemByName, sizesByCategory, lockedDept }
               </tr>
             </thead>
             <tbody>
-              {rows.map((r) =>
+              {sortedRows.map((r) =>
                 editingId === r.id ? (
                   <tr key={r.id} className="border-t border-slate-100 bg-amber-50">
                     <td className="px-2 py-1">
@@ -1499,7 +1499,7 @@ function ListTab({ departments, items, itemByName, sizesByCategory, lockedDept }
                     key={r.id}
                     className={
                       "border-t border-slate-100 " +
-                      (r.status === "未配布" ? "row-unissued" : r.status === "納品待ち" ? "row-pending" : "")
+                      (r.status === "申込済" ? "row-applied" : "")
                     }
                   >
                     <td className="px-2 py-1.5">{r.record_date}</td>
@@ -1527,7 +1527,7 @@ function ListTab({ departments, items, itemByName, sizesByCategory, lockedDept }
                   </tr>
                 )
               )}
-              {rows.length === 0 && (
+              {sortedRows.length === 0 && (
                 <tr>
                   <td colSpan={9} className="px-2 py-6 text-center text-slate-400">
                     該当するデータがありません
@@ -1540,8 +1540,7 @@ function ListTab({ departments, items, itemByName, sizesByCategory, lockedDept }
       )}
       <div className="flex items-center gap-4 mt-2">
         <p className="text-xs text-slate-400">最新100件まで表示しています。</p>
-        <span className="legend-item"><span className="legend-swatch legend-unissued"></span>未配布</span>
-        <span className="legend-item"><span className="legend-swatch legend-pending"></span>納品待ち</span>
+        <span className="legend-item"><span className="legend-swatch legend-applied"></span>申込済</span>
       </div>
     </div>
   );
