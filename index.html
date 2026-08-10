@@ -194,7 +194,10 @@ input, select {
   min-width: 0;
 }
 .sidebar-btn {
-  text-align: left;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   padding: 10px 12px;
   font-size: 14px;
   font-weight: 500;
@@ -806,9 +809,9 @@ function App() {
           {sidebarOpen && (
             <div className="app-sidebar">
               {[
-                ["input", "入力"],
-                ["list", "一覧"],
-                ["summary", "集計"],
+                ["input", "入　力"],
+                ["list", "一　覧"],
+                ["summary", "集　計"],
                 ...(lockedDept ? [] : [["masters", "品目マスタ"]]),
               ].map(([key, label]) => (
                 <button
