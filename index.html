@@ -1577,7 +1577,19 @@ function ListTab({ departments, items, itemByName, sizesByCategory, lockedDept }
                   >
                     <td className="px-2 py-1.5">{r.record_date}</td>
                     <td className="px-2 py-1.5">{r.department || "-"}</td>
-                    <td className="px-2 py-1.5">{r.person_name || "-"}</td>
+                    <td className="px-2 py-1.5">
+                      {r.person_name ? (
+                        <button
+                          onClick={() => setFilters((f) => ({ ...f, person: r.person_name }))}
+                          className="item-link"
+                          title="この名前で絞り込む"
+                        >
+                          {r.person_name}
+                        </button>
+                      ) : (
+                        "-"
+                      )}
+                    </td>
                     <td className="px-2 py-1.5">
                       <button
                         onClick={() => setFilters((f) => ({ ...f, item: r.item_name }))}
