@@ -1159,7 +1159,7 @@ function InputTab({ departments, items, itemByName, sizesByCategory, lockedDept 
         <button
           onClick={handleSubmit}
           disabled={!canSubmit || saving}
-          className="bg-red-50 border-2 border-red-600 text-red-800 rounded px-4 py-1.5 text-sm font-bold hover:bg-red-100 disabled:opacity-70"
+          className="bg-red-50 border-2 border-red-600 text-red-800 rounded px-4 py-1.5 text-sm font-bold hover:bg-red-100 disabled:bg-slate-100 disabled:border-slate-300 disabled:text-slate-500"
         >
           {saving ? "登録中..." : "この内容で申込む"}
         </button>
