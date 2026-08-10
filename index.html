@@ -1328,7 +1328,7 @@ function ListTab({ departments, items, itemByName, sizesByCategory, lockedDept }
 
   return (
     <div>
-      <div className="mb-3 grid grid-cols-2 sm:grid-cols-6 gap-3">
+      <div className="mb-3 grid grid-cols-4 sm:grid-cols-6 gap-3">
         <Field label="部署">
           {isLocked ? (
             <div className="locked-dept">{lockedDept}</div>
@@ -2017,7 +2017,7 @@ function SummaryTab({ departments, lockedDept }) {
 
   return (
     <div>
-      <div className="mb-4 grid grid-cols-2 sm:grid-cols-4 gap-3 items-end">
+      <div className="mb-4 grid grid-cols-4 sm:grid-cols-4 gap-3 items-end">
         <Field label="対象年度">
           <select
             value={year}
