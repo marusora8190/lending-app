@@ -186,7 +186,7 @@ input, select {
   width: 160px;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 8px;
   padding-right: 12px;
 }
 .app-content {
@@ -198,16 +198,20 @@ input, select {
   padding: 10px 12px;
   font-size: 14px;
   font-weight: 500;
-  border-radius: 6px;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
   color: #64748b;
 }
 .sidebar-btn:hover {
   background: #f1f5f9;
   color: #334155;
+  border-color: #cbd5e1;
 }
 .sidebar-btn-active {
   background: #fef3c7;
   color: #b45309;
+  border-color: #fcd34d;
 }
 .row-applied { background: #fffbeb; }
 .row-applied:hover { background: #fef3c7; }
@@ -1152,7 +1156,7 @@ function InputTab({ departments, items, itemByName, sizesByCategory, lockedDept 
         <button
           onClick={handleSubmit}
           disabled={!canSubmit || saving}
-          className="bg-white border-2 border-red-600 text-red-700 rounded px-4 py-1.5 text-sm font-bold hover:bg-red-50 disabled:opacity-40"
+          className="bg-red-50 border-2 border-red-600 text-red-800 rounded px-4 py-1.5 text-sm font-bold hover:bg-red-100 disabled:opacity-70"
         >
           {saving ? "登録中..." : "この内容で申込む"}
         </button>
