@@ -113,9 +113,8 @@ input, select {
 
 .locked-dept {
   width: 100%;
-  border: 1px solid #fcd34d;
-  background: #fffbeb;
-  color: #92400e;
+  border: 1px solid #e2e8f0;
+  color: #334155;
   border-radius: 6px;
   padding: 6px 8px;
   font-size: 14px;
@@ -1117,9 +1116,9 @@ function InputTab({ departments, items, itemByName, sizesByCategory, lockedDept 
         <button
           onClick={handleSubmit}
           disabled={!canSubmit || saving}
-          className="bg-amber-600 text-white rounded px-4 py-1.5 text-sm font-medium hover:bg-amber-700 disabled:opacity-40"
+          className="bg-white border-2 border-red-600 text-red-700 rounded px-4 py-1.5 text-sm font-bold hover:bg-red-50 disabled:opacity-40"
         >
-          {saving ? "登録中..." : "この内容で貸与申込みをする"}
+          {saving ? "登録中..." : "この内容で申込む"}
         </button>
         {message && (
           <span className={"text-sm " + (message.type === "error" ? "text-red-600" : "text-emerald-700")}>
@@ -1319,12 +1318,23 @@ function ListTab({ departments, items, itemByName, sizesByCategory, lockedDept }
           </select>
         </Field>
         <Field label="品名で検索">
-          <input
-            value={filters.item}
-            onChange={(e) => setFilters({ ...filters, item: e.target.value })}
-            placeholder="例: 安全靴"
-            className="w-full border border-slate-300 rounded px-2 py-1.5 text-sm"
-          />
+          <div className="flex gap-1">
+            <input
+              value={filters.item}
+              onChange={(e) => setFilters({ ...filters, item: e.target.value })}
+              placeholder="例: 安全靴"
+              className="w-full border border-slate-300 rounded px-2 py-1.5 text-sm"
+            />
+            {filters.item && (
+              <button
+                onClick={() => setFilters((f) => ({ ...f, item: "" }))}
+                className="border border-slate-300 rounded px-2 text-sm text-slate-500 hover:bg-slate-50 whitespace-nowrap"
+                title="品名検索を解除"
+              >
+                解除
+              </button>
+            )}
+          </div>
         </Field>
         <Field label="開始日">
           <input
@@ -1505,7 +1515,15 @@ function ListTab({ departments, items, itemByName, sizesByCategory, lockedDept }
                     <td className="px-2 py-1.5">{r.record_date}</td>
                     <td className="px-2 py-1.5">{r.department || "-"}</td>
                     <td className="px-2 py-1.5">{r.person_name || "-"}</td>
-                    <td className="px-2 py-1.5">{r.item_name}</td>
+                    <td className="px-2 py-1.5">
+                      <button
+                        onClick={() => setFilters((f) => ({ ...f, item: r.item_name }))}
+                        className="item-link"
+                        title="この品名で絞り込む"
+                      >
+                        {r.item_name}
+                      </button>
+                    </td>
                     <td className="px-2 py-1.5">{r.size || "-"}</td>
                     <td className="px-2 py-1.5 text-right">{r.quantity}</td>
                     <td className="px-2 py-1.5 text-right">{r.unit_price != null ? yen(r.unit_price) : "-"}</td>
