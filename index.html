@@ -605,26 +605,38 @@ const RECENT_ITEMS_KEY = "lendingApp_recentItems";
 const todayStr = () => new Date().toISOString().slice(0, 10);
 const uid = () => Math.random().toString(36).slice(2, 10);
 
-function loadRecentItems() {
+function loadHistory(key) {
   try {
-    const raw = window.localStorage.getItem(RECENT_ITEMS_KEY);
+    const raw = window.localStorage.getItem(key);
     return raw ? JSON.parse(raw) : [];
   } catch (e) {
     return [];
   }
 }
 
-function saveRecentItem(name) {
+function saveHistoryItem(key, value) {
   try {
-    let list = loadRecentItems().filter((n) => n !== name);
-    list.unshift(name);
+    let list = loadHistory(key).filter((n) => n !== value);
+    list.unshift(value);
     if (list.length > 30) list = list.slice(0, 30);
-    window.localStorage.setItem(RECENT_ITEMS_KEY, JSON.stringify(list));
+    window.localStorage.setItem(key, JSON.stringify(list));
     return list;
   } catch (e) {
-    return loadRecentItems();
+    return loadHistory(key);
   }
 }
+
+function loadRecentItems() {
+  return loadHistory(RECENT_ITEMS_KEY);
+}
+
+function saveRecentItem(name) {
+  return saveHistoryItem(RECENT_ITEMS_KEY, name);
+}
+
+const TEAM_HISTORY_KEY = "lendingApp_teamHistory";
+const APPLICANT_HISTORY_KEY = "lendingApp_applicantHistory";
+const INPUTTER_HISTORY_KEY = "lendingApp_inputterHistory";
 
 // 品種分類（上着・ズボン・シャツ・安全靴・ヘルメット・キャップ・空調服 等）
 // は固定リストではなく、品目マスタに実際に登録されている値から自動的に作られる。
@@ -858,6 +870,9 @@ function InputTab({ departments, items, itemByName, sizesByCategory, lockedDept 
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState(null);
   const [recentItems, setRecentItems] = useState(() => loadRecentItems());
+  const [teamHistory, setTeamHistory] = useState(() => loadHistory(TEAM_HISTORY_KEY));
+  const [applicantHistory, setApplicantHistory] = useState(() => loadHistory(APPLICANT_HISTORY_KEY));
+  const [inputterHistory, setInputterHistory] = useState(() => loadHistory(INPUTTER_HISTORY_KEY));
   const deptFilteredItems = useMemo(
     () => items.filter((it) => deptScopeIncludes(it.department_scope, common.department)),
     [items, common.department]
@@ -918,6 +933,9 @@ function InputTab({ departments, items, itemByName, sizesByCategory, lockedDept 
       }));
       await sb("lending_records", { method: "POST", body: payload });
       setMessage({ type: "success", text: `${validRows.length}件を登録しました。` });
+      if (common.team) setTeamHistory(saveHistoryItem(TEAM_HISTORY_KEY, common.team));
+      if (common.applicant) setApplicantHistory(saveHistoryItem(APPLICANT_HISTORY_KEY, common.applicant));
+      if (common.inputter) setInputterHistory(saveHistoryItem(INPUTTER_HISTORY_KEY, common.inputter));
       setRows([emptyRow(), emptyRow(), emptyRow()]);
       if (isLocked) setCommon((c) => ({ ...c, department: lockedDept }));
     } catch (e) {
@@ -960,22 +978,40 @@ function InputTab({ departments, items, itemByName, sizesByCategory, lockedDept 
           <input
             value={common.team}
             onChange={(e) => setCommon({ ...common, team: e.target.value })}
+            list="team-history"
             className="w-full border border-slate-300 rounded px-2 py-1.5 text-sm"
           />
+          <datalist id="team-history">
+            {teamHistory.map((t) => (
+              <option key={t} value={t} />
+            ))}
+          </datalist>
         </Field>
         <Field label="申込者">
           <input
             value={common.applicant}
             onChange={(e) => setCommon({ ...common, applicant: e.target.value })}
+            list="applicant-history"
             className="w-full border border-slate-300 rounded px-2 py-1.5 text-sm"
           />
+          <datalist id="applicant-history">
+            {applicantHistory.map((a) => (
+              <option key={a} value={a} />
+            ))}
+          </datalist>
         </Field>
         <Field label="入力者">
           <input
             value={common.inputter}
             onChange={(e) => setCommon({ ...common, inputter: e.target.value })}
+            list="inputter-history"
             className="w-full border border-slate-300 rounded px-2 py-1.5 text-sm"
           />
+          <datalist id="inputter-history">
+            {inputterHistory.map((i) => (
+              <option key={i} value={i} />
+            ))}
+          </datalist>
         </Field>
       </div>
 
@@ -1170,7 +1206,7 @@ function ListTab({ departments, items, itemByName, sizesByCategory, lockedDept }
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [filters, setFilters] = useState({ department: lockedDept || "", item: "", from: "", to: "", status: "" });
+  const [filters, setFilters] = useState({ department: lockedDept || "", item: "", person: "", from: "", to: "", status: "" });
   const [editingId, setEditingId] = useState(null);
   const [editValues, setEditValues] = useState({});
   const [savingEdit, setSavingEdit] = useState(false);
@@ -1182,6 +1218,7 @@ function ListTab({ departments, items, itemByName, sizesByCategory, lockedDept }
       let q = "lending_records?select=*&order=record_date.desc,created_at.desc&limit=100";
       if (filters.department) q += `&department=eq.${encodeURIComponent(filters.department)}`;
       if (filters.item) q += `&item_name=ilike.*${encodeURIComponent(filters.item)}*`;
+      if (filters.person) q += `&person_name=ilike.*${encodeURIComponent(filters.person)}*`;
       if (filters.from) q += `&record_date=gte.${filters.from}`;
       if (filters.to) q += `&record_date=lte.${filters.to}`;
       if (filters.status) q += `&status=eq.${encodeURIComponent(filters.status)}`;
@@ -1284,7 +1321,7 @@ function ListTab({ departments, items, itemByName, sizesByCategory, lockedDept }
 
   return (
     <div>
-      <div className="mb-3 grid grid-cols-2 sm:grid-cols-5 gap-3">
+      <div className="mb-3 grid grid-cols-2 sm:grid-cols-6 gap-3">
         <Field label="部署">
           {isLocked ? (
             <div className="locked-dept">{lockedDept}</div>
@@ -1330,6 +1367,25 @@ function ListTab({ departments, items, itemByName, sizesByCategory, lockedDept }
                 onClick={() => setFilters((f) => ({ ...f, item: "" }))}
                 className="border border-slate-300 rounded px-2 text-sm text-slate-500 hover:bg-slate-50 whitespace-nowrap"
                 title="品名検索を解除"
+              >
+                解除
+              </button>
+            )}
+          </div>
+        </Field>
+        <Field label="氏名で検索">
+          <div className="flex gap-1">
+            <input
+              value={filters.person}
+              onChange={(e) => setFilters({ ...filters, person: e.target.value })}
+              placeholder="例: 山田"
+              className="w-full border border-slate-300 rounded px-2 py-1.5 text-sm"
+            />
+            {filters.person && (
+              <button
+                onClick={() => setFilters((f) => ({ ...f, person: "" }))}
+                className="border border-slate-300 rounded px-2 text-sm text-slate-500 hover:bg-slate-50 whitespace-nowrap"
+                title="氏名検索を解除"
               >
                 解除
               </button>
