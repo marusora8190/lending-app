@@ -235,6 +235,36 @@ input, select {
   border-radius: 3px;
 }
 .legend-applied { background: #fffbeb; border: 1px solid #fcd34d; }
+.logout-btn {
+  margin-top: 16px;
+  color: #b91c1c;
+  border-color: #fecaca;
+  background: #fff5f5;
+}
+.logout-btn:hover {
+  background: #fee2e2;
+  color: #991b1b;
+  border-color: #fca5a5;
+}
+.logout-screen {
+  max-width: 420px;
+  margin: 80px auto;
+  text-align: center;
+  padding: 32px 24px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #ffffff;
+}
+.logout-screen h2 {
+  font-size: 18px;
+  color: #334155;
+  margin: 0 0 8px;
+}
+.logout-screen p {
+  font-size: 14px;
+  color: #64748b;
+  margin: 0;
+}
 
 @media (max-width: 640px) {
   .app-layout { flex-direction: column; }
@@ -741,6 +771,17 @@ function App() {
   const [items, setItems] = useState([]);
   const [sizeOptions, setSizeOptions] = useState([]);
   const [loadError, setLoadError] = useState("");
+  const [loggedOut, setLoggedOut] = useState(false);
+
+  const handleLogout = () => {
+    if (!window.confirm("アプリを終了します。よろしいですか？")) return;
+    try {
+      window.close();
+    } catch (e) {}
+    // window.close() は、このタブがスクリプトから開かれたものでない場合
+    // ブラウザに無視されることが多いため、その場合は終了画面を表示する。
+    setTimeout(() => setLoggedOut(true), 200);
+  };
 
   const lockedDept = useMemo(() => {
     try {
@@ -787,6 +828,17 @@ function App() {
     return m;
   }, [sizeOptions]);
 
+  if (loggedOut) {
+    return (
+      <div style={{ fontFamily: "system-ui, sans-serif" }} className="w-full max-w-6xl mx-auto p-4 text-slate-800">
+        <div className="logout-screen">
+          <h2>アプリを終了しました</h2>
+          <p>このタブを閉じてください。</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={{ fontFamily: "system-ui, sans-serif" }} className="w-full max-w-6xl mx-auto p-4 text-slate-800">
       <div className="mb-4">
@@ -825,6 +877,9 @@ function App() {
                   {label}
                 </button>
               ))}
+              <button onClick={handleLogout} className="sidebar-btn logout-btn">
+                ログアウト
+              </button>
             </div>
           )}
         </div>
@@ -1848,6 +1903,7 @@ function MastersTab({ items, onChanged, departments }) {
             <option value="B">B（cm・ズボン）</option>
             <option value="D">D（cm・靴）</option>
             <option value="F">F（フリー）</option>
+            <option value="Z">Z（S・F・O・XO）</option>
           </select>
         </Field>
         <Field label="単価（税込）">
