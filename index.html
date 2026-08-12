@@ -751,7 +751,7 @@ function emptyRow() {
     unitPrice: "",
     status: "申込済",
     note: "",
-    keepAfterSubmit: true,
+    keepAfterSubmit: false,
   };
 }
 
@@ -1155,7 +1155,11 @@ function InputTab({ departments, items, itemByName, sizesByCategory, lockedDept 
               <th className="px-2 py-2 text-left w-16">数量</th>
               {!simpleMode && <th className="px-2 py-2 text-left w-24">単価</th>}
               {!simpleMode && <th className="px-2 py-2 text-left w-32">備考</th>}
-              <th className="px-2 py-2 text-center w-16" title="この行の氏名・分類・品名を、登録後の新規入力にも残すかどうか">引継</th>
+              {!simpleMode && (
+                <th className="px-2 py-2 text-center w-16" title="この行の氏名・分類・品名を、登録後の新規入力にも残すかどうか">
+                  引継
+                </th>
+              )}
               <th className="w-16"></th>
             </tr>
           </thead>
@@ -1263,14 +1267,16 @@ function InputTab({ departments, items, itemByName, sizesByCategory, lockedDept 
                       />
                     </td>
                   )}
-                  <td className="px-2 py-1 text-center">
-                    <input
-                      type="checkbox"
-                      checked={r.keepAfterSubmit}
-                      onChange={(e) => updateRow(r.key, { keepAfterSubmit: e.target.checked })}
-                      title="登録後、この行の氏名・分類・品名を新規入力に残す"
-                    />
-                  </td>
+                  {!simpleMode && (
+                    <td className="px-2 py-1 text-center">
+                      <input
+                        type="checkbox"
+                        checked={r.keepAfterSubmit}
+                        onChange={(e) => updateRow(r.key, { keepAfterSubmit: e.target.checked })}
+                        title="登録後、この行の氏名・分類・品名を新規入力に残す"
+                      />
+                    </td>
+                  )}
                   <td className="px-1 py-1 text-center whitespace-nowrap">
                     <button
                       onClick={() => removeRow(r.key)}
