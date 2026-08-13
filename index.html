@@ -1366,15 +1366,38 @@ function ListTab({ departments, items, itemByName, sizesByCategory, lockedDept }
     setLoading(true);
     setError("");
     try {
-      let q = "lending_records?select=*&order=record_date.desc,created_at.desc&limit=100";
-      if (filters.department) q += `&department=eq.${encodeURIComponent(filters.department)}`;
-      if (filters.item) q += `&item_name=ilike.*${encodeURIComponent(filters.item)}*`;
-      if (filters.person) q += `&person_name=ilike.*${encodeURIComponent(filters.person)}*`;
-      if (filters.from) q += `&record_date=gte.${filters.from}`;
-      if (filters.to) q += `&record_date=lte.${filters.to}`;
-      if (filters.status) q += `&status=eq.${encodeURIComponent(filters.status)}`;
-      const data = await sb(q);
-      setRows(data);
+      const baseFilters = () => {
+        let f = "";
+        if (filters.department) f += `&department=eq.${encodeURIComponent(filters.department)}`;
+        if (filters.item) f += `&item_name=ilike.*${encodeURIComponent(filters.item)}*`;
+        if (filters.person) f += `&person_name=ilike.*${encodeURIComponent(filters.person)}*`;
+        if (filters.from) f += `&record_date=gte.${filters.from}`;
+        if (filters.to) f += `&record_date=lte.${filters.to}`;
+        return f;
+      };
+
+      if (filters.status) {
+        // 現況を絞り込んでいる場合は、これまで通り単純に新しい順で取得する。
+        const q = `lending_records?select=*&order=record_date.desc,created_at.desc&limit=100${baseFilters()}&status=eq.${encodeURIComponent(
+          filters.status
+        )}`;
+        const data = await sb(q);
+        setRows(data);
+      } else {
+        // 「申込済」は日付が古くても一覧の上側に常に表示したいので、
+        // 日付による100件制限の影響を受けないよう別クエリで全件取得する。
+        // 「貸与済」は従来通り新しい順に残り件数分だけ取得する。
+        const f = baseFilters();
+        const appliedQ = `lending_records?select=*&order=record_date.desc,created_at.desc&limit=500${f}&status=eq.申込済`;
+        const appliedData = await sb(appliedQ);
+        const remaining = Math.max(0, 100 - appliedData.length);
+        let lentData = [];
+        if (remaining > 0) {
+          const lentQ = `lending_records?select=*&order=record_date.desc,created_at.desc&limit=${remaining}${f}&status=eq.貸与済`;
+          lentData = await sb(lentQ);
+        }
+        setRows([...appliedData, ...lentData]);
+      }
     } catch (e) {
       setError(e.message);
     } finally {
