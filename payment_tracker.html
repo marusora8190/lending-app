@@ -1,0 +1,1498 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>支出申請管理</title>
+<style>
+  :root{
+    --ink:#e2604a;
+    --ink-dark:#b8412c;
+    --paper:#fffdf9;
+    --line:#e4ded2;
+    --text:#2b2622;
+    --muted:#8a7f6e;
+    --panel:#ffffff;
+    --accent-bg:#fbf3ea;
+    --green:#3f7d5c;
+    --green-dark:#2f5f45;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:"Hiragino Kaku Gothic ProN","Yu Gothic",-apple-system,BlinkMacSystemFont,sans-serif;
+    background:#f3efe6;
+    color:var(--text);
+  }
+  .app{max-width:1400px;margin:0 auto;padding:28px 20px 80px;}
+  .app-header{display:flex;align-items:baseline;justify-content:flex-start;margin-bottom:22px;flex-wrap:wrap;gap:12px;}
+  .app-header h1{font-size:22px;margin:0;letter-spacing:.04em;}
+  .app-header h1 span{color:var(--ink);}
+  .app-header p{margin:0;color:var(--muted);font-size:13px;}
+
+  .reload-notice{
+    background:#fff6e0;border:1px solid #e8cf8a;border-radius:9px;
+    padding:12px 16px;margin-bottom:18px;font-size:13.5px;color:#7a5c00;
+    display:flex;align-items:center;gap:8px;
+  }
+  .reload-notice b{font-weight:700;}
+  .reload-notice .rn-text{flex:1;}
+  .reload-notice .rn-close{
+    background:none;border:none;color:#7a5c00;font-size:18px;line-height:1;
+    cursor:pointer;padding:2px 6px;flex-shrink:0;
+  }
+  .reload-notice .rn-close:hover{color:var(--ink-dark);}
+
+  .collapse-toggle-btn{
+    margin-left:auto;background:var(--panel);border:1px solid #d8d1c2;border-radius:20px;
+    padding:6px 14px;font-size:12.5px;color:var(--muted);cursor:pointer;white-space:nowrap;
+  }
+  .collapse-toggle-btn:hover{background:var(--accent-bg);color:var(--ink-dark);}
+
+  .scroll-btn{
+    background:var(--panel);border:1px solid #d8d1c2;border-radius:7px;
+    padding:6px 12px;font-size:13px;color:var(--text);cursor:pointer;
+  }
+  .scroll-btn:hover{background:var(--accent-bg);color:var(--ink-dark);}
+
+  .toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:18px;}
+  .search-wrap{position:relative;flex:1;min-width:220px;max-width:360px;}
+  .search-wrap input{
+    width:100%;border:1px solid #d8d1c2;border-radius:7px;padding:9px 12px;
+    font-size:14px;background:var(--panel);
+  }
+  select.year-filter{border:1px solid #d8d1c2;border-radius:7px;padding:9px 12px;font-size:14px;background:var(--panel);}
+  .status-filter{display:flex;gap:6px;}
+  .status-filter button{
+    border:1px solid #d8d1c2;background:var(--panel);border-radius:20px;padding:7px 14px;
+    font-size:13px;cursor:pointer;color:var(--text);
+  }
+  .status-filter button.active{background:var(--ink);color:#fff;border-color:var(--ink);}
+
+  .table-scroll{overflow-x:auto;overflow-y:auto;max-height:70vh;background:var(--panel);border-radius:12px;border:1px solid var(--line);}
+  body.controls-hidden .table-scroll{max-height:90vh;}
+  table{width:100%;border-collapse:collapse;font-size:13.5px;}
+  .table-scroll table{table-layout:fixed;}
+  .table-scroll table th:nth-child(1), .table-scroll table td:nth-child(1){width:64px;}
+  .table-scroll table th:nth-child(2), .table-scroll table td:nth-child(2){width:70px;}
+  .table-scroll table th:nth-child(3), .table-scroll table td:nth-child(3){width:90px;}
+  .table-scroll table th:nth-child(4), .table-scroll table td:nth-child(4){width:auto;}
+  .table-scroll table th:nth-child(5), .table-scroll table td:nth-child(5){width:90px;}
+  .table-scroll table th:nth-child(6), .table-scroll table td:nth-child(6),
+  .table-scroll table th:nth-child(7), .table-scroll table td:nth-child(7),
+  .table-scroll table th:nth-child(8), .table-scroll table td:nth-child(8){width:110px;}
+  .table-scroll table th:nth-child(9), .table-scroll table td:nth-child(9){width:90px;}
+  .table-scroll table th:nth-child(10), .table-scroll table td:nth-child(10){width:160px;}
+  th{
+    text-align:center;padding:11px 12px;background:var(--accent-bg);color:var(--ink-dark);
+    font-weight:700;white-space:nowrap;border-bottom:1px solid var(--line);
+    position:sticky;top:0;z-index:2;
+  }
+  td{padding:11px 12px;border-bottom:1px solid var(--line);white-space:nowrap;}
+  tr:last-child td{border-bottom:none;}
+  tr:hover td{background:#fbf8f2;}
+  td.subject-cell{white-space:nowrap;font-weight:600;}
+  td.amt{text-align:right;font-variant-numeric:tabular-nums;}
+  .badge{
+    display:inline-block;font-size:11px;padding:2px 8px;border-radius:20px;
+    margin-left:6px;font-weight:700;vertical-align:middle;
+  }
+  .badge-crossyear{background:#fdecea;color:var(--ink-dark);}
+  .badge-done{background:#e9f5ee;color:var(--green-dark);}
+  .badge-open{background:#fff6e0;color:#9a7300;}
+  .row-edit-btn{
+    background:var(--accent-bg);border:1px solid var(--line);border-radius:6px;
+    padding:6px 12px;font-size:13px;cursor:pointer;color:var(--text);
+  }
+  .row-edit-btn:hover{background:#f1e6d6;}
+  .empty-row td{text-align:center;color:var(--muted);padding:40px 0;}
+
+  /* モーダル */
+  .modal-overlay{
+    position:fixed;inset:0;background:rgba(30,25,20,.45);display:none;
+    align-items:flex-start;justify-content:center;padding:40px 16px;z-index:50;overflow-y:auto;
+  }
+  .modal-overlay.open{display:flex;}
+  .modal-box{
+    background:var(--panel);border-radius:14px;padding:26px 28px;max-width:640px;width:100%;
+    box-shadow:0 10px 40px rgba(0,0,0,.2);
+  }
+  .modal-box h2{margin:0 0 4px;font-size:18px;}
+  .modal-box .modal-sub{color:var(--muted);font-size:13px;margin:0 0 18px;}
+  .summary-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px;}
+  .summary-box{background:var(--accent-bg);border-radius:10px;padding:12px 14px;}
+  .summary-box .label{font-size:12px;color:var(--muted);margin-bottom:4px;}
+  .summary-box .value{font-size:17px;font-weight:700;font-variant-numeric:tabular-nums;}
+  .summary-box.remaining .value{color:var(--ink-dark);}
+
+  .payment-list{margin-bottom:16px;}
+  .payment-row{
+    display:flex;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);
+  }
+  .payment-row input[type="date"]{border:1px solid #d8d1c2;border-radius:6px;padding:7px 8px;font-size:13px;}
+  .payment-row input[type="text"].amount-input{
+    border:1px solid #d8d1c2;border-radius:6px;padding:7px 8px;font-size:13px;width:130px;text-align:right;
+  }
+  .payment-row input[type="text"].note-input{
+    border:1px solid #d8d1c2;border-radius:6px;padding:7px 8px;font-size:13px;flex:1;min-width:80px;
+  }
+  .payment-row .del-btn{
+    background:none;border:none;color:var(--ink-dark);cursor:pointer;font-size:16px;padding:4px 8px;
+  }
+  .add-payment-btn{
+    background:var(--accent-bg);border:1px dashed var(--ink);color:var(--ink-dark);border-radius:8px;
+    padding:9px 14px;font-size:13px;cursor:pointer;width:100%;margin-top:6px;
+  }
+  .add-payment-btn:hover{background:#f5e5d8;}
+
+  .manual-complete-row{
+    display:flex;align-items:center;gap:8px;margin-top:14px;font-size:13.5px;color:var(--text);cursor:pointer;
+  }
+  .manual-complete-row input[type="checkbox"]{width:16px;height:16px;cursor:pointer;}
+
+  .badge-manual{background:#e9f5ee;color:var(--green-dark);}
+
+  .modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:20px;}
+  .btn-secondary{background:var(--accent-bg);border:1px solid var(--line);border-radius:7px;padding:10px 18px;font-size:14px;cursor:pointer;color:var(--text);}
+  .btn-primary{background:var(--green);color:#fff;border:none;border-radius:7px;padding:10px 20px;font-size:14px;cursor:pointer;font-weight:700;}
+  .btn-primary:hover{background:var(--green-dark);}
+  .btn-primary:disabled{opacity:.5;cursor:default;}
+
+  .toast{
+    position:fixed;bottom:24px;left:50%;transform:translateX(-50%);
+    background:var(--text);color:#fff;padding:12px 20px;border-radius:8px;font-size:13.5px;
+    box-shadow:0 6px 20px rgba(0,0,0,.25);z-index:100;opacity:0;transition:opacity .2s;pointer-events:none;
+  }
+  .toast.show{opacity:1;}
+
+  .loading{text-align:center;padding:40px;color:var(--muted);}
+
+  /* タブ */
+  .category-tab-nav{display:flex;gap:8px;margin-bottom:14px;}
+  .category-tab-nav button{
+    background:var(--panel);border:1px solid #d8d1c2;border-radius:9px;padding:11px 22px;
+    font-size:15px;cursor:pointer;color:var(--text);font-weight:700;
+  }
+  .category-tab-nav button.active{background:var(--ink);color:#fff;border-color:var(--ink);}
+
+  .tab-nav{display:flex;gap:6px;margin-bottom:18px;border-bottom:2px solid var(--line);flex-wrap:wrap;}
+  .tab-nav button{
+    background:none;border:none;padding:10px 18px;font-size:14.5px;cursor:pointer;
+    color:var(--muted);font-weight:700;border-bottom:3px solid transparent;margin-bottom:-2px;
+  }
+  .tab-nav button.active{color:var(--ink-dark);border-bottom-color:var(--ink);}
+  #dept-tabs-container{display:contents;}
+  #dept-tabs-container button{
+    padding:9px 14px;border:1px solid #d8d1c2;border-radius:7px;background:#fffefb;
+    color:var(--text);font-size:13.5px;font-family:inherit;font-weight:600;
+    cursor:pointer;margin-bottom:4px;
+  }
+  #dept-tabs-container button:hover{border-color:var(--ink);}
+  #dept-tabs-container button.active{border-color:#d99a76;background:#f2d9c4;color:var(--ink-dark);}
+  .dept-filter-count{
+    background:var(--ink);color:#fff;font-size:11px;font-weight:700;
+    border-radius:9px;padding:2px 8px;line-height:1.4;align-self:center;
+  }
+  .tab-panel{display:none;}
+  .tab-panel.active{display:block;}
+
+  /* 印刷用タブ */
+  .print-toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:16px;}
+  .print-toolbar select{border:1px solid #d8d1c2;border-radius:7px;padding:9px 12px;font-size:14px;background:var(--panel);}
+  .btn-print{background:var(--ink);color:#fff;border:none;border-radius:7px;padding:10px 20px;font-size:14px;cursor:pointer;font-weight:700;}
+  .btn-print:hover{background:var(--ink-dark);}
+  .print-sheet{background:#fff;border:1px solid var(--line);border-radius:12px;padding:26px 30px;}
+  .print-sheet h2{margin:0 0 4px;font-size:18px;text-align:center;}
+  .print-sheet .print-date{text-align:right;color:var(--muted);font-size:12px;margin-bottom:14px;}
+  .print-table{width:100%;border-collapse:collapse;font-size:13px;}
+  .print-table th, .print-table td{border:1px solid #ccc2ac;padding:7px 9px;}
+  .print-table th{background:var(--accent-bg);color:var(--ink-dark);}
+  .print-table td.amt{text-align:right;font-variant-numeric:tabular-nums;}
+  .print-table tfoot td{font-weight:700;background:#faf6ee;}
+
+  /* 照合タブ */
+  .verify-toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:16px;}
+  .verify-toolbar select{border:1px solid #d8d1c2;border-radius:7px;padding:9px 12px;font-size:14px;background:var(--panel);}
+  .verify-sheet{background:#fff;border:1px solid var(--line);border-radius:12px;padding:22px 26px;}
+  .verify-hint{color:var(--muted);font-size:13px;margin:0 0 14px;}
+  .verify-rows{margin-bottom:10px;}
+  .verify-empty{color:var(--muted);font-size:13.5px;padding:16px 0;}
+  .verify-summary{margin-top:18px;padding-top:16px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:8px;font-size:14px;}
+  .verify-summary .row{display:flex;justify-content:space-between;max-width:360px;}
+  .verify-summary .row span:last-child{font-weight:700;font-variant-numeric:tabular-nums;}
+
+  /* 照合タブの印刷テンプレート(申請書合計表 のレイアウトを再現) */
+  .verify-print-sheet{display:none;font-family:"MS PGothic","ＭＳＰゴシック","MS Gothic",sans-serif;padding:50px 60px 30px;}
+  .vp-date{text-align:right;font-size:14pt;margin-bottom:40px;}
+  .vp-title{text-align:center;font-size:18pt;font-weight:700;margin-bottom:44px;letter-spacing:.02em;}
+  .vp-table{width:100%;border-collapse:collapse;font-size:14pt;max-width:680px;margin:0 auto;}
+  .vp-table td{padding:9px 6px;border-bottom:none;}
+  .vp-table td.vp-num{width:30px;color:var(--text);}
+  .vp-table td.vp-subject{}
+  .vp-table td.vp-amount{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;}
+  .vp-total-block{text-align:right;margin-top:70px;}
+  .vp-total-inline{
+    display:inline-block;font-weight:700;font-size:14pt;
+    border-bottom:2px solid #333;padding:0 2px 6px;
+    font-variant-numeric:tabular-nums;white-space:nowrap;
+  }
+
+  @media (max-width:720px){
+    .summary-grid{grid-template-columns:1fr;}
+    table{font-size:12.5px;}
+  }
+
+  @media print{
+    body{background:#fff;}
+    .app-header, .reload-notice, .collapse-toggle-btn, .category-tab-nav, .tab-nav, .print-toolbar, .modal-overlay, .toast{display:none !important;}
+    #tab-list{display:none !important;}
+    #tab-verify{display:none !important;}
+    #tab-ledger{display:none !important;}
+    #tab-print{display:block !important;}
+    .app{padding:0;max-width:none;}
+    .print-sheet{border:none;padding:0;}
+
+    /* 照合タブから印刷する場合は、こちらを優先表示 */
+    body.print-mode-verify #tab-print{display:none !important;}
+    body.print-mode-verify #tab-verify{display:block !important;}
+    body.print-mode-verify .verify-toolbar,
+    body.print-mode-verify .verify-sheet{display:none !important;}
+    body.print-mode-verify .verify-print-sheet{
+      display:block !important;padding-right:0 !important;
+      position:relative !important;height:180mm !important;
+    }
+    body.print-mode-verify .vp-table{max-width:none !important;width:100% !important;margin:0 !important;}
+    body.print-mode-verify .vp-date{padding-right:4mm !important;}
+    body.print-mode-verify .vp-title{transform:translateX(-40mm) !important;}
+    /* 用紙下端から18mm(下余白15mm+さらに3mm)の位置に固定表示する */
+    body.print-mode-verify .vp-total-block{
+      position:absolute !important;left:0;right:0;bottom:3mm;margin-top:0 !important;
+    }
+  }
+
+  /* 年度合計タブ */
+  .ledger-toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:16px;}
+  .ledger-toolbar select{border:1px solid #d8d1c2;border-radius:7px;padding:9px 12px;font-size:14px;background:var(--panel);}
+  .ledger-table-scroll{overflow-x:auto;overflow-y:auto;max-height:65vh;background:var(--panel);border-radius:12px;border:1px solid var(--line);}
+  body.controls-hidden .ledger-table-scroll{max-height:88vh;}
+  .ledger-table{border-collapse:collapse;font-size:12.5px;min-width:1500px;width:100%;table-layout:fixed;}
+  .ledger-table th:nth-child(1), .ledger-table td:nth-child(1){width:46px;}
+  .ledger-table th:nth-child(2), .ledger-table td:nth-child(2){width:70px;}
+  .ledger-table th:nth-child(3), .ledger-table td:nth-child(3){width:400px;}
+  .ledger-table th:nth-child(4), .ledger-table td:nth-child(4){width:110px;}
+  .ledger-table th:nth-child(5), .ledger-table td:nth-child(5){width:70px;}
+  .ledger-table th:nth-child(6), .ledger-table td:nth-child(6){width:90px;}
+  .ledger-table th:nth-child(7), .ledger-table td:nth-child(7),
+  .ledger-table th:nth-child(8), .ledger-table td:nth-child(8),
+  .ledger-table th:nth-child(9), .ledger-table td:nth-child(9),
+  .ledger-table th:nth-child(10), .ledger-table td:nth-child(10){width:110px;}
+  .ledger-table th:nth-child(n+11), .ledger-table td:nth-child(n+11){width:100px;}
+  .ledger-table th, .ledger-table td{padding:8px 9px;border-bottom:1px solid var(--line);border-right:1px solid #f0ebe0;white-space:nowrap;text-align:center;}
+  .ledger-table th:last-child, .ledger-table td:last-child{border-right:none;}
+  .ledger-table th{
+    background:var(--accent-bg);color:var(--ink-dark);font-weight:700;
+    position:sticky;top:0;z-index:2;
+  }
+  .ledger-table td.subject{text-align:left;font-weight:600;white-space:nowrap;min-width:320px;}
+  .ledger-table td.num{text-align:right;font-variant-numeric:tabular-nums;}
+  .ledger-table td.neg{color:var(--ink-dark);font-weight:700;}
+  .ledger-table tbody tr:hover td{background:#fbf8f2;}
+  .ledger-table tfoot td{font-weight:700;background:#faf6ee;}
+  .ledger-empty{text-align:center;color:var(--muted);padding:40px 0;}
+  .ledger-table td.mark-cell{text-align:center;}
+  .ledger-table td.mark-cell input[type="checkbox"]{width:16px;height:16px;cursor:pointer;}
+  .ledger-table td.date-cell input[type="date"]{
+    border:1px solid #d8d1c2;border-radius:5px;padding:4px 5px;font-size:12px;width:118px;
+  }
+  .ledger-table input.amount-input{
+    border:1px solid #d8d1c2;border-radius:5px;padding:4px 6px;font-size:12px;width:100px;text-align:right;
+  }
+
+  /* 済・日付・工事名称・予想経費の4列を固定(横スクロールしても常に表示) */
+  .ledger-table .stick-1{ width:46px; min-width:46px; position:sticky; left:0; z-index:3; }
+  .ledger-table .stick-2{ width:70px; min-width:70px; position:sticky; left:46px; z-index:3; }
+  .ledger-table .stick-3{ position:sticky; left:116px; z-index:3; }
+  .ledger-table .stick-4{ position:sticky; z-index:3; border-right:2px solid var(--ink); }
+  .ledger-table th.stick-1, .ledger-table th.stick-2, .ledger-table th.stick-3, .ledger-table th.stick-4{ background:var(--accent-bg); z-index:4; }
+  .ledger-table td.stick-1, .ledger-table td.stick-2, .ledger-table td.stick-3, .ledger-table td.stick-4{ background:var(--panel); }
+  .ledger-table tbody tr:hover td.stick-1,
+  .ledger-table tbody tr:hover td.stick-2,
+  .ledger-table tbody tr:hover td.stick-3,
+  .ledger-table tbody tr:hover td.stick-4{ background:#fbf8f2; }
+  .ledger-table tfoot td.stick-1{ position:sticky; left:0; z-index:3; background:#faf6ee; }
+  .ledger-table tfoot td.stick-4{ background:#faf6ee; }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="app-header">
+    <h1><span>支出</span>申請管理</h1>
+    <p>予想経費申請書システムと連携し、工事ごとの支払い状況をまとめて管理します</p>
+  </div>
+
+  <div id="top-controls">
+    <div class="reload-notice" id="reload-notice">
+      <span>💡</span>
+      <span class="rn-text">このファイルを開いた場合は、一度 <b>Ctrl+Shift+R</b> でハードリロードしてからお使いください。最新の状態が正しく表示されます。</span>
+      <button type="button" class="rn-close" onclick="dismissReloadNotice()" title="閉じる">×</button>
+    </div>
+
+    <div class="category-tab-nav" id="tabs-bar">
+      <button type="button" class="active" data-category="本部" onclick="setCategoryFilter('本部')">✓ 本部営繕費</button>
+      <button type="button" data-category="教庁" onclick="setCategoryFilter('教庁')">教庁営繕費</button>
+    </div>
+
+    <div class="tab-nav">
+      <button type="button" class="active" data-tab="list" onclick="switchTab('list')">一覧</button>
+      <button type="button" data-tab="verify" onclick="switchTab('verify')">支払集計</button>
+      <button type="button" data-tab="ledger" onclick="switchTab('ledger')">支払詳細</button>
+      <span id="dept-tabs-container"></span>
+    </div>
+  </div>
+
+  <div class="tab-panel active" id="tab-list">
+    <div class="toolbar">
+      <div class="search-wrap">
+        <input type="text" id="search-box" placeholder="主題・部署・担当で検索">
+      </div>
+      <select id="year-filter" class="year-filter">
+        <option value="">すべての年度</option>
+      </select>
+      <div class="status-filter">
+        <button type="button" class="active" data-status="all" onclick="setStatusFilter('all')">すべて</button>
+        <button type="button" data-status="unpaid" onclick="setStatusFilter('unpaid')">未払い</button>
+        <button type="button" data-status="open" onclick="setStatusFilter('open')">支払い中</button>
+        <button type="button" data-status="done" onclick="setStatusFilter('done')">完了</button>
+      </div>
+      <button type="button" class="btn-print" onclick="doPrint()">印刷する</button>
+      <button type="button" class="collapse-toggle-btn" onclick="toggleTopControls()">▲　タブを隠す</button>
+    </div>
+
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>No.</th>
+            <th>作成日</th>
+            <th>部署</th>
+            <th>主題</th>
+            <th>担当</th>
+            <th>総経費</th>
+            <th>支払合計</th>
+            <th>残金</th>
+            <th>状態</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="list-body">
+          <tr class="empty-row"><td colspan="10" class="loading">読み込み中…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="tab-panel" id="tab-print">
+    <div class="print-sheet">
+      <h2 id="print-title">支出申請一覧</h2>
+      <div class="print-date" id="print-date"></div>
+      <table class="print-table">
+        <thead>
+          <tr>
+            <th>No.</th>
+            <th>年度</th>
+            <th>部署</th>
+            <th>主題</th>
+            <th>担当</th>
+            <th>総経費</th>
+            <th>支払合計</th>
+            <th>残金</th>
+          </tr>
+        </thead>
+        <tbody id="print-body"></tbody>
+        <tfoot>
+          <tr>
+            <td colspan="5">合計</td>
+            <td class="amt" id="print-total-cost">¥0</td>
+            <td class="amt" id="print-total-paid">¥0</td>
+            <td class="amt" id="print-total-remaining">¥0</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  </div>
+
+  <div class="tab-panel" id="tab-verify">
+    <div class="verify-toolbar">
+      <select id="verify-year" class="year-filter" onchange="refreshVerifyRowsFromRequests()"></select>
+      <select id="verify-month" class="year-filter" onchange="refreshVerifyRowsFromRequests()">
+        <option value="4">4月</option>
+        <option value="5">5月</option>
+        <option value="6">6月</option>
+        <option value="7">7月</option>
+        <option value="8">8月</option>
+        <option value="9">9月</option>
+        <option value="10">10月</option>
+        <option value="11">11月</option>
+        <option value="12">12月</option>
+        <option value="1">1月</option>
+        <option value="2">2月</option>
+        <option value="3">3月</option>
+      </select>
+      <button type="button" class="btn-print" onclick="doVerifyPrint()">印刷する</button>
+      <button type="button" class="collapse-toggle-btn" onclick="toggleTopControls()">▲　タブを隠す</button>
+    </div>
+    <div class="verify-sheet">
+      <p class="verify-hint">部署ごとのタブでこの月に入力済みの請求金額が、工事名とともに自動で並びます。</p>
+      <div class="verify-rows" id="verify-rows"></div>
+      <div class="verify-summary">
+        <div class="row"><span>支払い分合計</span><span id="verify-input-total">¥0</span></div>
+      </div>
+    </div>
+
+    <div class="verify-print-sheet" id="verify-print-sheet">
+      <div class="vp-date" id="vp-date"></div>
+      <div class="vp-title" id="vp-title"></div>
+      <table class="vp-table">
+        <tbody id="vp-body"></tbody>
+      </table>
+      <div class="vp-total-block">
+        <span class="vp-total-inline">合　　計　<span id="vp-total"></span></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="tab-panel" id="tab-ledger">
+    <p class="verify-hint" id="dept-tab-hint"></p>
+    <div class="ledger-toolbar">
+      <select id="ledger-year-filter" class="year-filter" onchange="renderLedger()"></select>
+      <button type="button" class="scroll-btn" onclick="scrollTableByColumn('ledger-table-scroll', -1)" title="1列左へ">◀</button>
+      <button type="button" class="scroll-btn" onclick="scrollTableByColumn('ledger-table-scroll', 1)" title="1列右へ">▶</button>
+      <button type="button" class="collapse-toggle-btn" onclick="toggleTopControls()">▲　タブを隠す</button>
+    </div>
+    <div class="ledger-table-scroll" id="ledger-table-scroll">
+      <table class="ledger-table">
+        <thead>
+          <tr>
+            <th class="stick-1">済</th>
+            <th class="stick-2">会計承認</th>
+            <th class="stick-3">工事名称</th>
+            <th class="stick-4">予想経費</th>
+            <th>No.</th>
+            <th>担当</th>
+            <th>前年度合計</th>
+            <th>支払額合計</th>
+            <th>工事総合計</th>
+            <th>残額</th>
+            <th>4月支払分</th>
+            <th>5月支払分</th>
+            <th>6月支払分</th>
+            <th>7月支払分</th>
+            <th>8月支払分</th>
+            <th>9月支払分</th>
+            <th>10月支払分</th>
+            <th>11月支払分</th>
+            <th>12月支払分</th>
+            <th>1月支払分</th>
+            <th>2月支払分</th>
+            <th>3月支払分</th>
+            <th>3月末支払分</th>
+          </tr>
+        </thead>
+        <tbody id="ledger-body">
+          <tr><td colspan="23" class="ledger-empty">読み込み中…</td></tr>
+        </tbody>
+        <tfoot id="ledger-foot"></tfoot>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- 編集モーダル -->
+<div class="modal-overlay" id="modal-overlay">
+  <div class="modal-box">
+    <h2 id="modal-title">-</h2>
+    <p class="modal-sub" id="modal-sub">-</p>
+
+    <div class="summary-grid">
+      <div class="summary-box">
+        <div class="label">総経費</div>
+        <div class="value" id="summary-total">¥0</div>
+      </div>
+      <div class="summary-box">
+        <div class="label">支払合計</div>
+        <div class="value" id="summary-paid">¥0</div>
+      </div>
+      <div class="summary-box remaining">
+        <div class="label">残金</div>
+        <div class="value" id="summary-remaining">¥0</div>
+      </div>
+    </div>
+
+    <div class="payment-list" id="payment-list"></div>
+    <button type="button" class="add-payment-btn" onclick="addPaymentRow()">＋ 支払いを追加</button>
+
+    <label class="manual-complete-row">
+      <input type="checkbox" id="manual-complete-check" onchange="renderModalSummary()">
+      支払いを完了として扱う(金額が一致していなくても)
+    </label>
+
+    <div class="modal-actions">
+      <button type="button" class="btn-secondary" onclick="closeModal()">閉じる</button>
+      <button type="button" class="btn-primary" id="save-btn" onclick="savePayments()">保存する</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const SUPABASE_URL = "https://zhxuntrhxnrssqpvcmvl.supabase.co";
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpoeHVudHJoeG5yc3NxcHZjbXZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIyNDcyNjYsImV4cCI6MjA5NzgyMzI2Nn0.l3pwvKZVVJqDA4HORqt-Op-cTvVF3bkX1ovWgAuSO58";
+
+async function sb(path, options = {}) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+    ...options,
+    headers: {
+      apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${SUPABASE_KEY}`,
+      'Content-Type': 'application/json',
+      Prefer: options.prefer || 'return=representation',
+      ...(options.headers || {})
+    }
+  });
+  if (!res.ok) {
+    const t = await res.text().catch(()=> '');
+    throw new Error(`API error ${res.status}: ${t}`);
+  }
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
+}
+
+function fiscalYear(dateStr){
+  if(!dateStr) return null;
+  const d = new Date(dateStr+'T00:00:00');
+  const y = d.getFullYear();
+  const m = d.getMonth()+1;
+  return m >= 4 ? y : y - 1;
+}
+function eraLabel(fy){
+  if(fy === null || fy === undefined) return '—';
+  const r = fy - 2018;
+  return r >= 1 ? `令和${r}年度` : `${fy}年度`;
+}
+function yen(n){
+  return '¥' + Number(n||0).toLocaleString();
+}
+function serialLabel(r){
+  if(!r.serial_no) return '—';
+  const fy = r.budget_year;
+  if(fy === null || fy === undefined) return String(r.serial_no);
+  const ry = fy - 2018;
+  const yLabel = ry >= 1 ? `R${ry}` : String(fy);
+  return `${yLabel}-${r.serial_no}`;
+}
+function escapeHtml(s){
+  return (s||'').toString().replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// 金額入力欄: 入力中に3桁ごとにカンマ区切りで表示する
+function formatAmountInput(el){
+  const raw = el.value.replace(/[^0-9]/g, '');
+  el.value = raw ? Number(raw).toLocaleString() : '';
+}
+
+// 「工事名称」列は内容に応じて幅が変わるため、その右隣(予想経費列)の
+// 固定位置(left)を実際の幅に合わせて毎回計算し直す
+// ◀▶ボタンで、テーブルをちょうど1列分だけ横スクロールする
+function scrollTableByColumn(containerId, direction){
+  const container = document.getElementById(containerId);
+  if(!container) return;
+  // 「〇月支払分」の列(金額入力欄が入っているセル)を1つ見つけて、その幅を「1列分」とする
+  const sampleInput = container.querySelector('tbody td.num input.amount-input');
+  const sampleCell = sampleInput ? sampleInput.closest('td') : null;
+  const colWidth = sampleCell ? sampleCell.getBoundingClientRect().width : 140;
+  container.scrollBy({ left: direction * colWidth, behavior: 'smooth' });
+}
+
+function applyStickyOffsets(tableEl){
+  if(!tableEl) return;
+  const col3 = tableEl.querySelector('thead th.stick-3');
+  if(!col3) return;
+  const offset4 = 116 + col3.getBoundingClientRect().width;
+  tableEl.querySelectorAll('.stick-4').forEach(el=>{ el.style.left = offset4 + 'px'; });
+}
+
+let requests = [];   // expense_requests (with computed payment aggregates attached)
+let payments = [];   // 全支払いレコード
+let overrides = [];  // 手動「完了」フラグ
+let ledgerMarks = {}; // 年度合計タブの「済」マーク: `${expense_request_id}_${fiscal_year}` -> boolean
+let statusFilter = 'all';
+const ALL_PAY_DEPTS = ['営繕課', '電気課', '放送通信課', '水道課'];
+let sharedDeptFilter = new Set(ALL_PAY_DEPTS); // 一覧・照合・部署タブ、すべて共通の部署絞り込み
+
+// すべての部署絞り込みUI(部署タブ)を最新の選択状態で再描画する
+function renderAllDeptFilterUI(){
+  updateDeptTabActiveState();
+}
+
+function toggleSharedDept(d){
+  if(sharedDeptFilter.has(d)) sharedDeptFilter.delete(d); else sharedDeptFilter.add(d);
+  renderAllDeptFilterUI();
+  if(document.getElementById('tab-list').classList.contains('active')) renderList();
+  if(document.getElementById('tab-verify').classList.contains('active')){
+    populateVerifyYearOptions();
+    refreshVerifyRowsFromRequests();
+  }
+  if(document.getElementById('tab-ledger').classList.contains('active')){
+    populateLedgerYearOptions();
+    renderLedger();
+  }
+}
+let categoryFilter = '本部'; // '本部' または '教庁'
+let editingRequestId = null;
+let editingRows = []; // モーダル内で編集中の支払い行
+let verifyRows = [{subject:'', amount:''}]; // 照合タブで手入力中の行
+let verifyDefaultsSet = false; // 照合タブの初期値(今年度・今月)を設定済みか
+
+async function loadAll(){
+  const body = document.getElementById('list-body');
+  body.innerHTML = '<tr class="empty-row"><td colspan="10" class="loading">読み込み中…</td></tr>';
+  try{
+    const [reqRows, payRows, ovrRows, markRows] = await Promise.all([
+      sb('expense_requests?select=id,department,assignee_department,assignee,subject,budget_category,total_cost,budget_year,created_at,serial_no'),
+      sb('payments?select=*&order=payment_date.asc'),
+      sb('payment_overrides?select=*'),
+      sb('ledger_marks?select=*')
+    ]);
+    requests = reqRows;
+    payments = payRows;
+    overrides = ovrRows;
+    ledgerMarks = {};
+    markRows.forEach(m=>{ ledgerMarks[`${m.expense_request_id}_${m.fiscal_year}`] = m.is_marked; });
+    attachAggregates();
+    populateYearFilter();
+    renderList();
+    populateDeptTabs();
+  }catch(e){
+    body.innerHTML = '<tr class="empty-row"><td colspan="10">読み込みに失敗しました: '+escapeHtml(e.message)+'</td></tr>';
+    console.error(e);
+  }
+}
+
+function attachAggregates(){
+  const byReq = {};
+  payments.forEach(p=>{
+    (byReq[p.expense_request_id] ||= []).push(p);
+  });
+  const overrideByReq = {};
+  overrides.forEach(o=>{ overrideByReq[o.expense_request_id] = o.is_completed; });
+  requests.forEach(r=>{
+    const list = byReq[r.id] || [];
+    r._payments = list;
+    r._paidTotal = list.reduce((s,p)=>s+Number(p.amount||0),0);
+    r._remaining = Number(r.total_cost||0) - r._paidTotal;
+    r._fiscalYears = new Set(list.map(p=>fiscalYear(p.payment_date)));
+    if(r.budget_year) r._fiscalYears.add(r.budget_year);
+    r._crossYear = r._fiscalYears.size > 1;
+    r._manualComplete = !!overrideByReq[r.id];
+    r._done = r._manualComplete || (list.length > 0 && r._remaining <= 0);
+  });
+}
+
+function matchesCategory(r){
+  return (r.budget_category || '').startsWith(categoryFilter);
+}
+
+// 部署ごとにタブを自動生成するための、表示順(この順にあれば表示、無ければ出さない)
+const DEPT_TAB_ORDER = ['営繕課', '建築課', '造園課', '電気課', '放送通信課', '水道課'];
+function matchesCurrentDept(r){
+  return sharedDeptFilter.has(r.department);
+}
+
+function populateYearFilter(){
+  const years = new Set();
+  requests.filter(r => matchesCategory(r) && sharedDeptFilter.has(r.department)).forEach(r=>{
+    r._fiscalYears.forEach(y=>years.add(y));
+  });
+  const sorted = [...years].sort((a,b)=>b-a);
+  const optionsHtml = '<option value="">すべての年度</option>' +
+    sorted.map(y=>`<option value="${y}">${escapeHtml(eraLabel(y))}</option>`).join('');
+
+  const sel = document.getElementById('year-filter');
+  const prevListVal = sel.value;
+  sel.innerHTML = optionsHtml;
+  sel.value = prevListVal;
+}
+
+// ---------------- 科目タブ切替(本部営繕費/教庁営繕費) ----------------
+function setCategoryFilter(cat){
+  categoryFilter = cat;
+  document.querySelectorAll('.category-tab-nav button').forEach(b=>{
+    const selected = b.dataset.category === cat;
+    b.classList.toggle('active', selected);
+    b.textContent = (selected ? '✓ ' : '') + b.dataset.category + '営繕費';
+  });
+  populateYearFilter();
+  renderList();
+  populateDeptTabs();
+  if(document.getElementById('tab-verify').classList.contains('active')){
+    populateVerifyYearOptions();
+    refreshVerifyRowsFromRequests();
+  }
+  if(document.getElementById('tab-ledger').classList.contains('active')){
+    populateLedgerYearOptions();
+    renderLedger();
+  }
+}
+
+// 現在の科目(本部営繕費/教庁営繕費)に実在する部署ごとに、タブを自動生成する
+function populateDeptTabs(){
+  const present = new Set();
+  requests.filter(matchesCategory).forEach(r=>{
+    if(r.department) present.add(r.department);
+  });
+  const depts = DEPT_TAB_ORDER.filter(d => present.has(d));
+  present.forEach(d=>{ if(!DEPT_TAB_ORDER.includes(d)) depts.push(d); });
+
+  // 部署が1つも選ばれていない場合は、詰まないよう全部署を選び直す
+  if(sharedDeptFilter.size === 0){
+    depts.forEach(d=>sharedDeptFilter.add(d));
+  }
+
+  const container = document.getElementById('dept-tabs-container');
+  container.innerHTML = depts.map(d=>
+    `<button type="button" data-dept="${escapeHtml(d)}" onclick="clickDeptTab('${escapeHtml(d)}')">${escapeHtml(d)}</button>`
+  ).join('');
+
+  updateDeptTabActiveState();
+}
+
+function clickDeptTab(d){
+  toggleSharedDept(d);
+  switchTab('ledger');
+}
+
+function updateDeptTabActiveState(){
+  document.querySelectorAll('#dept-tabs-container button').forEach(b=>{
+    const selected = sharedDeptFilter.has(b.dataset.dept);
+    b.classList.toggle('active', selected);
+    b.textContent = (selected ? '✓ ' : '') + b.dataset.dept;
+  });
+  const hintEl = document.getElementById('dept-tab-hint');
+  if(hintEl){
+    hintEl.textContent = sharedDeptFilter.size > 0
+      ? `「${[...sharedDeptFilter].join('」「')}」が支払う工事を表示しています。`
+      : '部署を選択してください。';
+  }
+}
+
+// ---------------- タブ切替 ----------------
+function switchTab(tab){
+  document.querySelectorAll('.tab-nav > button').forEach(b=>{
+    b.classList.toggle('active', b.dataset.tab === tab);
+  });
+  document.getElementById('tab-list').classList.toggle('active', tab === 'list');
+  document.getElementById('tab-verify').classList.toggle('active', tab === 'verify');
+  document.getElementById('tab-ledger').classList.toggle('active', tab === 'ledger');
+  updateDeptTabActiveState();
+  if(tab === 'verify'){
+    populateVerifyYearOptions();
+    refreshVerifyRowsFromRequests();
+  }
+  if(tab === 'ledger'){
+    populateLedgerYearOptions();
+    renderLedger();
+  }
+}
+
+// ---------------- 照合タブ ----------------
+function populateVerifyYearOptions(){
+  const years = new Set();
+  requests.filter(r => matchesCategory(r) && sharedDeptFilter.has(r.department)).forEach(r=>{
+    r._fiscalYears.forEach(y=>years.add(y));
+  });
+  const sorted = [...years].sort((a,b)=>b-a);
+  const sel = document.getElementById('verify-year');
+  const prevVal = sel.value;
+  sel.innerHTML = sorted.map(y=>`<option value="${y}">${escapeHtml(eraLabel(y))}</option>`).join('');
+  if(sorted.some(y=>String(y)===prevVal)) sel.value = prevVal;
+  applyVerifyDefaultsIfNeeded(sorted);
+}
+
+// この年度・月に登録された予想経費申請書(工事)を、照合タブの行として自動的に並べる。
+// すでに金額を入力済みの工事名があれば、その金額は保持する。
+function refreshVerifyRowsFromRequests(){
+  const fy = Number(document.getElementById('verify-year').value);
+  const month = Number(document.getElementById('verify-month').value);
+
+  const prevAmounts = {};
+  verifyRows.forEach(row=>{
+    if(row.subject) prevAmounts[row.subject] = row.amount;
+  });
+
+  if(!fy || !month){
+    verifyRows = [{subject:'', amount:''}];
+    renderVerifyRows();
+    calcVerify();
+    return;
+  }
+
+  const calYear = month >= 4 ? fy : fy + 1;
+  const isThisMonth = (dStr)=>{
+    if(!dStr) return false;
+    const d = new Date(dStr + 'T00:00:00');
+    return d.getFullYear() === calYear && (d.getMonth()+1) === month;
+  };
+
+  // 支払日(payment_date)ベースで、この月に入力済みの請求を集める
+  const rows = [];
+  requests.filter(r => matchesCategory(r) && sharedDeptFilter.has(r.department)).forEach(r=>{
+    (r._payments || []).forEach(p=>{
+      if(isThisMonth(p.payment_date)){
+        rows.push({ subject: r.subject || '（主題未入力）', amount: String(p.amount || 0), _sortKey: r.created_at || '' });
+      }
+    });
+  });
+
+  rows.sort((a,b)=> a._sortKey.localeCompare(b._sortKey));
+
+  verifyRows = rows.map(({subject, amount})=>({ subject, amount }));
+
+  renderVerifyRows();
+  calcVerify();
+}
+
+function applyVerifyDefaultsIfNeeded(availableYears){
+  if(verifyDefaultsSet) return;
+  const today = new Date();
+  const todayStr = today.toISOString().slice(0,10);
+  const currentFy = fiscalYear(todayStr);
+  const currentMonth = today.getMonth() + 1;
+
+  const yearSel = document.getElementById('verify-year');
+  if(availableYears.some(y => y === currentFy)){
+    yearSel.value = currentFy;
+  }
+
+  const monthSel = document.getElementById('verify-month');
+  monthSel.value = String(currentMonth);
+
+  verifyDefaultsSet = true;
+}
+
+function renderVerifyRows(){
+  const wrap = document.getElementById('verify-rows');
+  if(verifyRows.length === 0){
+    wrap.innerHTML = '<div class="verify-empty">この年度・月・対象に該当する支払いはまだありません。</div>';
+    return;
+  }
+  wrap.innerHTML = verifyRows.map((row, idx)=>`
+    <div class="payment-row" data-idx="${idx}">
+      <input type="text" class="note-input" placeholder="工事名(任意)" value="${escapeHtml(row.subject)}" oninput="updateVerifyRow(${idx},'subject',this.value)">
+      <input type="text" class="amount-input" placeholder="金額" value="${row.amount ? Number(row.amount).toLocaleString() : ''}" oninput="formatAmountInput(this); updateVerifyRow(${idx},'amount',this.value.replace(/,/g,''))">
+      <button type="button" class="del-btn" title="削除" onclick="deleteVerifyRow(${idx})">×</button>
+    </div>
+  `).join('');
+}
+
+function updateVerifyRow(idx, key, value){
+  verifyRows[idx][key] = value;
+  calcVerify();
+}
+function deleteVerifyRow(idx){
+  verifyRows.splice(idx,1);
+  if(verifyRows.length === 0) verifyRows.push({subject:'', amount:''});
+  renderVerifyRows();
+  calcVerify();
+}
+
+function calcVerify(){
+  const inputTotal = verifyRows.reduce((s,r)=>s + (Number(r.amount) || 0), 0);
+  document.getElementById('verify-input-total').textContent = yen(inputTotal);
+}
+
+function reiwaDateStr(d){
+  const y = d.getFullYear() - 2018; // 令和1年 = 2019年
+  const m = d.getMonth() + 1;
+  const day = d.getDate();
+  return `令和${y}年${m}月${day}日`;
+}
+
+function doVerifyPrint(){
+  const fy = Number(document.getElementById('verify-year').value);
+  const month = Number(document.getElementById('verify-month').value);
+  const catLabel = categoryFilter === '本部' ? '本部営繕費' : '教庁営繕費';
+
+  document.getElementById('vp-date').textContent = reiwaDateStr(new Date());
+  const reiwaYear = fy ? fy - 2018 : null;
+  document.getElementById('vp-title').textContent =
+    fy ? `令和　${reiwaYear}年度 ${month}月　${catLabel}支出申請合計額` : `${month}月　${catLabel}支出申請合計額`;
+
+  const rows = verifyRows.filter(r => (r.subject && r.subject.trim()) || r.amount);
+  const body = document.getElementById('vp-body');
+  if(rows.length === 0){
+    body.innerHTML = '<tr><td></td><td style="color:var(--muted);">(入力された行がありません)</td><td></td></tr>';
+  }else{
+    body.innerHTML = rows.map((r, idx)=>`
+      <tr>
+        <td class="vp-num">${idx+1}.</td>
+        <td class="vp-subject">${escapeHtml(r.subject || '')}</td>
+        <td class="vp-amount">${Number(r.amount || 0).toLocaleString()}</td>
+      </tr>
+    `).join('');
+  }
+
+  const total = rows.reduce((s,r)=>s + (Number(r.amount) || 0), 0);
+  document.getElementById('vp-total').textContent = total.toLocaleString() + '円';
+
+  document.body.classList.add('print-mode-verify');
+
+  // 照合タブの印刷はA4横向きにする(@pageはCSSクラスで条件分けできないため、印刷直前だけ一時的に挿入)
+  const orientStyle = document.createElement('style');
+  orientStyle.id = 'verify-print-orientation';
+  orientStyle.textContent = '@page{size:A4 landscape;margin:15mm 18mm 15mm 15mm;}';
+  document.head.appendChild(orientStyle);
+
+  window.print();
+}
+
+window.addEventListener('afterprint', ()=>{
+  document.body.classList.remove('print-mode-verify');
+  const orientStyle = document.getElementById('verify-print-orientation');
+  if(orientStyle) orientStyle.remove();
+});
+
+// ---------------- 年度合計タブ ----------------
+let ledgerDefaultsSet = false;
+
+function reiwaShortDate(dateStr){
+  if(!dateStr) return '—';
+  const d = new Date(dateStr);
+  const y = d.getFullYear() - 2018;
+  return `R${y}.${d.getMonth()+1}.${d.getDate()}`;
+}
+
+function populateLedgerYearOptions(){
+  const years = new Set();
+  requests.filter(r => matchesCategory(r) && matchesCurrentDept(r)).forEach(r=>{
+    r._fiscalYears.forEach(y=>years.add(y));
+  });
+  const sorted = [...years].sort((a,b)=>b-a);
+  const sel = document.getElementById('ledger-year-filter');
+  const prevVal = sel.value;
+  sel.innerHTML = sorted.map(y=>`<option value="${y}">${escapeHtml(eraLabel(y))}</option>`).join('');
+  if(sorted.some(y=>String(y)===prevVal)){
+    sel.value = prevVal;
+  }else if(!ledgerDefaultsSet){
+    const currentFy = fiscalYear(new Date().toISOString().slice(0,10));
+    if(sorted.some(y=>y===currentFy)) sel.value = currentFy;
+    ledgerDefaultsSet = true;
+  }
+}
+
+async function toggleLedgerMark(requestId, fy, checked){
+  const key = `${requestId}_${fy}`;
+  ledgerMarks[key] = checked; // 先に画面側の状態を更新(体感を軽くする)
+  try{
+    await sb('ledger_marks', {
+      method: 'POST',
+      prefer: 'resolution=merge-duplicates,return=minimal',
+      body: JSON.stringify({
+        expense_request_id: requestId,
+        fiscal_year: fy,
+        is_marked: checked,
+        updated_at: new Date().toISOString()
+      })
+    });
+  }catch(e){
+    showToast('「済」の保存に失敗しました: ' + e.message, 5000);
+    console.error(e);
+  }
+}
+
+// まだその月に支払いが無いマスに金額が入力されたら、その場で新しい支払いとして登録する
+async function createLedgerPayment(requestId, month, value){
+  if(!value) return;
+  const fy = Number(document.getElementById('ledger-year-filter').value);
+  const dateVal = monthToDate(fy, month);
+  const amount = Number(String(value).replace(/,/g,'') || 0);
+
+  try{
+    const created = await sb('payments', {
+      method: 'POST',
+      body: JSON.stringify({
+        expense_request_id: requestId,
+        payment_date: dateVal,
+        invoice_date: dateVal,
+        amount
+      })
+    });
+    if(created && created[0]) payments.push(created[0]);
+    showToast('請求を登録しました');
+  }catch(e){
+    showToast('請求の登録に失敗しました: ' + e.message, 5000);
+    console.error(e);
+    return;
+  }
+  attachAggregates();
+  populateLedgerYearOptions();
+  renderLedger();
+}
+
+async function updateLedgerAmount(paymentId, value){
+  const amount = Number(String(value).replace(/,/g,'') || 0);
+  const p = payments.find(x=>x.id === paymentId);
+  if(p) p.amount = amount;
+  try{
+    await sb(`payments?id=eq.${paymentId}`, {
+      method: 'PATCH', prefer: 'return=minimal',
+      body: JSON.stringify({ amount, updated_at: new Date().toISOString() })
+    });
+  }catch(e){
+    showToast('金額の保存に失敗しました: ' + e.message, 5000);
+    console.error(e);
+  }
+  attachAggregates();
+  renderLedger();
+}
+
+function renderLedger(){
+  const fy = Number(document.getElementById('ledger-year-filter').value);
+  const body = document.getElementById('ledger-body');
+  const foot = document.getElementById('ledger-foot');
+
+  if(!fy){
+    body.innerHTML = '<tr><td colspan="23" class="ledger-empty">年度を選択してください</td></tr>';
+    foot.innerHTML = '';
+    return;
+  }
+
+  let rows = requests.filter(r => matchesCategory(r) && matchesCurrentDept(r) && r._fiscalYears.has(fy));
+  rows.sort((a,b) => (b.created_at||'').localeCompare(a.created_at||''));
+
+  if(rows.length === 0){
+    body.innerHTML = '<tr><td colspan="23" class="ledger-empty">該当する工事がありません</td></tr>';
+    foot.innerHTML = '';
+    return;
+  }
+
+  const months = [4,5,6,7,8,9,10,11,12,1,2,3];
+  const monthTotals = months.map(()=>0);
+  let yearEndTotal = 0;
+  let sumCost=0, sumPrevYear=0, sumThisYear=0, sumTotal=0, sumRemaining=0;
+
+  const rowsHtml = rows.map(r=>{
+    let prevYearTotal = 0, thisYearTotal = 0;
+    const byMonth = {};
+    const byMonthPayments = {};
+    months.forEach(m=>{ byMonth[m] = 0; byMonthPayments[m] = []; });
+    let yearEndAmount = 0;
+    const yearEndPayments = [];
+
+    (r._payments || []).forEach(p=>{
+      if(!p.payment_date) return;
+      const pfy = fiscalYear(p.payment_date);
+      const amt = Number(p.amount || 0);
+      if(pfy < fy){
+        prevYearTotal += amt;
+      }else if(pfy === fy){
+        thisYearTotal += amt;
+        const d = new Date(p.payment_date + 'T00:00:00');
+        const m = d.getMonth()+1;
+        if(m === 3 && d.getDate() === 31){
+          yearEndAmount += amt;
+          yearEndPayments.push(p);
+        }else{
+          byMonth[m] = (byMonth[m] || 0) + amt;
+          byMonthPayments[m].push(p);
+        }
+      }
+    });
+
+    const totalPaid = prevYearTotal + thisYearTotal;
+    const remaining = Number(r.total_cost||0) - totalPaid;
+
+    sumCost += Number(r.total_cost||0);
+    sumPrevYear += prevYearTotal;
+    sumThisYear += thisYearTotal;
+    sumTotal += totalPaid;
+    sumRemaining += remaining;
+    months.forEach((m,idx)=> monthTotals[idx] += byMonth[m]);
+    yearEndTotal += yearEndAmount;
+
+    const monthCells = months.map(m => {
+      const list = byMonthPayments[m];
+      if(list.length === 0){
+        return `<td class="num"><input type="text" class="amount-input" oninput="formatAmountInput(this)" onchange="createLedgerPayment('${r.id}', ${m}, this.value)"></td>`;
+      }
+      if(list.length === 1){
+        const p = list[0];
+        return `<td class="num"><input type="text" class="amount-input" value="${p.amount ? Number(p.amount).toLocaleString() : ''}" oninput="formatAmountInput(this)" onchange="updateLedgerAmount('${p.id}', this.value)"></td>`;
+      }
+      // 同じ月に複数件の支払いがある場合は合算表示(個別編集は請求書一覧タブから)
+      return `<td class="num">${Number(byMonth[m]).toLocaleString()}</td>`;
+    }).join('');
+
+    let yearEndCell;
+    if(yearEndPayments.length === 0){
+      yearEndCell = `<td class="num"><input type="text" class="amount-input" oninput="formatAmountInput(this)" onchange="createLedgerPayment('${r.id}', 'yearend', this.value)"></td>`;
+    }else if(yearEndPayments.length === 1){
+      const p = yearEndPayments[0];
+      yearEndCell = `<td class="num"><input type="text" class="amount-input" value="${p.amount ? Number(p.amount).toLocaleString() : ''}" oninput="formatAmountInput(this)" onchange="updateLedgerAmount('${p.id}', this.value)"></td>`;
+    }else{
+      yearEndCell = `<td class="num">${Number(yearEndAmount).toLocaleString()}</td>`;
+    }
+
+    const markKey = `${r.id}_${fy}`;
+    const isMarked = !!ledgerMarks[markKey];
+
+    return `
+      <tr>
+        <td class="mark-cell stick-1"><input type="checkbox" ${isMarked ? 'checked' : ''} onchange="toggleLedgerMark('${r.id}', ${fy}, this.checked)"></td>
+        <td class="stick-2">${reiwaShortDate(r.created_at)}</td>
+        <td class="subject stick-3">${escapeHtml(r.subject || '（主題未入力）')}</td>
+        <td class="num stick-4">${Number(r.total_cost||0).toLocaleString()}</td>
+        <td>${escapeHtml(serialLabel(r))}</td>
+        <td>${escapeHtml(r.assignee_department || r.assignee || '—')}</td>
+        <td class="num">${prevYearTotal ? prevYearTotal.toLocaleString() : ''}</td>
+        <td class="num">${thisYearTotal ? thisYearTotal.toLocaleString() : ''}</td>
+        <td class="num">${totalPaid ? totalPaid.toLocaleString() : ''}</td>
+        <td class="num${remaining < 0 ? ' neg' : ''}">${remaining.toLocaleString()}</td>
+        ${monthCells}
+        ${yearEndCell}
+      </tr>`;
+  }).join('');
+
+  body.innerHTML = rowsHtml;
+  applyStickyOffsets(body.closest('table'));
+
+  const monthFootCells = monthTotals.map(v => `<td class="num">${v ? v.toLocaleString() : ''}</td>`).join('');
+  const yearEndFootCell = `<td class="num">${yearEndTotal ? yearEndTotal.toLocaleString() : ''}</td>`;
+  foot.innerHTML = `
+    <tr>
+      <td colspan="3" class="stick-1">合計</td>
+      <td class="num stick-4">${sumCost.toLocaleString()}</td>
+      <td></td>
+      <td></td>
+      <td class="num">${sumPrevYear.toLocaleString()}</td>
+      <td class="num">${sumThisYear.toLocaleString()}</td>
+      <td class="num">${sumTotal.toLocaleString()}</td>
+      <td class="num${sumRemaining < 0 ? ' neg' : ''}">${sumRemaining.toLocaleString()}</td>
+      ${monthFootCells}
+      ${yearEndFootCell}
+    </tr>`;
+}
+
+// 選択中の年度と月番号(4〜3、または'yearend')から、その月1日(または3/31)の日付文字列を作る
+function monthToDate(fy, month){
+  if(month === 'yearend'){
+    return `${fy + 1}-03-31`;
+  }
+  const calYear = month >= 4 ? fy : fy + 1;
+  return `${calYear}-${String(month).padStart(2,'0')}-01`;
+}
+
+
+// ---------------- 印刷用タブ ----------------
+function renderPrintList(){
+  const yearSel = document.getElementById('year-filter').value;
+  const catLabel = categoryFilter === '本部' ? '本部営繕費' : '教庁営繕費';
+  let rows = requests.filter(r => matchesCategory(r) && sharedDeptFilter.has(r.department));
+  if(yearSel){
+    const y = Number(yearSel);
+    rows = rows.filter(r => r._fiscalYears.has(y));
+    document.getElementById('print-title').textContent = `${catLabel}　支出申請一覧（${eraLabel(y)}）`;
+  }else{
+    document.getElementById('print-title').textContent = `${catLabel}　支出申請一覧（全年度）`;
+  }
+  rows.sort((a,b)=> (b.created_at||'').localeCompare(a.created_at||''));
+
+  const body = document.getElementById('print-body');
+  if(rows.length === 0){
+    body.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--muted);">該当する工事がありません</td></tr>';
+  }else{
+    body.innerHTML = rows.map(r=>`
+      <tr>
+        <td>${escapeHtml(serialLabel(r))}</td>
+        <td>${escapeHtml(eraLabel(r.budget_year))}</td>
+        <td>${escapeHtml(r.department||'—')}</td>
+        <td>${escapeHtml(r.subject||'（主題未入力）')}</td>
+        <td>${escapeHtml(r.assignee||'—')}</td>
+        <td class="amt">${yen(r.total_cost)}</td>
+        <td class="amt">${yen(r._paidTotal)}</td>
+        <td class="amt">${yen(r._remaining)}</td>
+      </tr>`).join('');
+  }
+
+  const totalCost = rows.reduce((s,r)=>s+Number(r.total_cost||0),0);
+  const totalPaid = rows.reduce((s,r)=>s+Number(r._paidTotal||0),0);
+  document.getElementById('print-total-cost').textContent = yen(totalCost);
+  document.getElementById('print-total-paid').textContent = yen(totalPaid);
+  document.getElementById('print-total-remaining').textContent = yen(totalCost - totalPaid);
+
+  document.getElementById('print-date').textContent =
+    '出力日：' + new Date().toLocaleDateString('ja-JP');
+}
+
+function doPrint(){
+  renderPrintList();
+  window.print();
+}
+
+function setStatusFilter(s){
+  statusFilter = s;
+  document.querySelectorAll('.status-filter button').forEach(b=>{
+    b.classList.toggle('active', b.dataset.status === s);
+  });
+  renderList();
+}
+
+function getFilteredRequests(){
+  const kw = document.getElementById('search-box').value.trim();
+  const yearSel = document.getElementById('year-filter').value;
+  let rows = requests.filter(r => matchesCategory(r) && sharedDeptFilter.has(r.department));
+
+  if(yearSel){
+    const y = Number(yearSel);
+    rows = rows.filter(r => r._fiscalYears.has(y));
+  }
+  if(kw){
+    const keywords = kw.split(/[\s　]+/).filter(Boolean);
+    rows = rows.filter(r=>{
+      const hay = [r.subject, r.department, r.assignee_department, r.assignee].join(' ');
+      return keywords.every(k => hay.includes(k));
+    });
+  }
+  if(statusFilter === 'unpaid'){
+    rows = rows.filter(r => !r._done && r._paidTotal <= 0);
+  }else if(statusFilter === 'open'){
+    rows = rows.filter(r => !r._done && r._paidTotal > 0);
+  }else if(statusFilter === 'done'){
+    rows = rows.filter(r => r._done);
+  }
+
+  rows.sort((a,b)=> (b.created_at||'').localeCompare(a.created_at||''));
+  return rows;
+}
+
+function renderList(){
+  const body = document.getElementById('list-body');
+  const rows = getFilteredRequests();
+  if(rows.length === 0){
+    body.innerHTML = '<tr class="empty-row"><td colspan="10">該当する工事がありません</td></tr>';
+    return;
+  }
+  body.innerHTML = rows.map(r=>{
+    const badges = [];
+    if(r._crossYear) badges.push('<span class="badge badge-crossyear">年度またぎ</span>');
+    if(r._done) badges.push('<span class="badge badge-done">完了</span>');
+    else if(r._paidTotal > 0) badges.push('<span class="badge badge-open">支払い中</span>');
+    else badges.push('<span class="badge badge-open">未払い</span>');
+    if(r._manualComplete && r._remaining !== 0) badges.push('<span class="badge badge-manual">手動完了</span>');
+
+    return `
+      <tr>
+        <td>${escapeHtml(serialLabel(r))}</td>
+        <td>${escapeHtml(reiwaShortDate(r.created_at))}</td>
+        <td>${escapeHtml(r.department||'—')}</td>
+        <td class="subject-cell">${escapeHtml(r.subject||'（主題未入力）')}</td>
+        <td>${escapeHtml(r.assignee||'—')}</td>
+        <td class="amt">${yen(r.total_cost)}</td>
+        <td class="amt">${yen(r._paidTotal)}</td>
+        <td class="amt">${yen(r._remaining)}</td>
+        <td>${badges.join(' ')}</td>
+        <td><button type="button" class="row-edit-btn" onclick="openModal('${r.id}')">支払いを記録</button></td>
+      </tr>`;
+  }).join('');
+}
+
+document.getElementById('search-box').addEventListener('input', renderList);
+document.getElementById('year-filter').addEventListener('change', renderList);
+
+// ---------------- モーダル ----------------
+function openModal(id){
+  const r = requests.find(x=>x.id === id);
+  if(!r) return;
+  editingRequestId = id;
+  editingRows = (r._payments || []).map(p=>({
+    id: p.id, payment_date: p.payment_date, amount: p.amount, note: p.note || '', _deleted:false
+  }));
+
+  document.getElementById('modal-title').textContent = r.subject || '（主題未入力）';
+  document.getElementById('modal-sub').textContent =
+    `No.${serialLabel(r)}　${eraLabel(r.budget_year)}　${r.department||''}　担当:${r.assignee||'—'}`;
+  document.getElementById('manual-complete-check').checked = !!r._manualComplete;
+
+  renderModalSummary();
+  renderPaymentRows();
+  document.getElementById('modal-overlay').classList.add('open');
+}
+
+function closeModal(){
+  document.getElementById('modal-overlay').classList.remove('open');
+  editingRequestId = null;
+  editingRows = [];
+}
+
+function currentReq(){
+  return requests.find(x=>x.id === editingRequestId);
+}
+
+function renderModalSummary(){
+  const r = currentReq();
+  const paidTotal = editingRows.filter(x=>!x._deleted).reduce((s,x)=>s+(Number(x.amount)||0),0);
+  const remaining = Number(r.total_cost||0) - paidTotal;
+  document.getElementById('summary-total').textContent = yen(r.total_cost);
+  document.getElementById('summary-paid').textContent = yen(paidTotal);
+  document.getElementById('summary-remaining').textContent = yen(remaining);
+}
+
+function renderPaymentRows(){
+  const wrap = document.getElementById('payment-list');
+  const visible = editingRows.map((row, idx)=>({row, idx})).filter(x=>!x.row._deleted);
+  if(visible.length === 0){
+    wrap.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:10px 0;">まだ支払い記録がありません</div>';
+    return;
+  }
+  wrap.innerHTML = visible.map(({row, idx})=>`
+    <div class="payment-row" data-idx="${idx}">
+      <input type="date" value="${row.payment_date||''}" onchange="updateRow(${idx},'payment_date',this.value)">
+      <input type="text" class="amount-input" placeholder="金額" value="${row.amount ? Number(row.amount).toLocaleString() : ''}" oninput="formatAmountInput(this); updateRow(${idx},'amount',this.value.replace(/,/g,''))">
+      <input type="text" class="note-input" placeholder="備考(任意)" value="${escapeHtml(row.note||'')}" oninput="updateRow(${idx},'note',this.value)">
+      <button type="button" class="del-btn" title="削除" onclick="deleteRow(${idx})">×</button>
+    </div>
+  `).join('');
+}
+
+function updateRow(idx, key, value){
+  editingRows[idx][key] = value;
+  renderModalSummary();
+}
+function deleteRow(idx){
+  if(editingRows[idx].id){
+    editingRows[idx]._deleted = true;
+  }else{
+    editingRows.splice(idx,1);
+  }
+  renderPaymentRows();
+  renderModalSummary();
+}
+function addPaymentRow(){
+  editingRows.push({id:null, payment_date:new Date().toISOString().slice(0,10), amount:'', note:'', _deleted:false});
+  renderPaymentRows();
+  renderModalSummary();
+}
+
+async function savePayments(){
+  const btn = document.getElementById('save-btn');
+  const prevLabel = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '保存中…';
+  try{
+    // 削除
+    const toDelete = editingRows.filter(r=>r._deleted && r.id);
+    for(const r of toDelete){
+      await sb(`payments?id=eq.${r.id}`, { method:'DELETE', prefer:'return=minimal' });
+    }
+    // 新規追加・更新
+    const toKeep = editingRows.filter(r=>!r._deleted);
+    for(const r of toKeep){
+      if(!r.payment_date || !r.amount) continue; // 未入力の空行はスキップ
+      const payload = {
+        expense_request_id: editingRequestId,
+        payment_date: r.payment_date,
+        amount: Number(r.amount),
+        note: r.note || null
+      };
+      if(r.id){
+        await sb(`payments?id=eq.${r.id}`, {
+          method:'PATCH', prefer:'return=minimal',
+          body: JSON.stringify({...payload, updated_at: new Date().toISOString()})
+        });
+      }else{
+        await sb('payments', { method:'POST', prefer:'return=minimal', body: JSON.stringify(payload) });
+      }
+    }
+
+    // 手動「完了」フラグの保存(upsert)
+    const manualComplete = document.getElementById('manual-complete-check').checked;
+    await sb('payment_overrides', {
+      method: 'POST',
+      prefer: 'resolution=merge-duplicates,return=minimal',
+      body: JSON.stringify({
+        expense_request_id: editingRequestId,
+        is_completed: manualComplete,
+        updated_at: new Date().toISOString()
+      })
+    });
+
+    showToast('保存しました');
+    closeModal();
+    await loadAll();
+  }catch(e){
+    showToast('保存に失敗しました: ' + e.message, 6000);
+    console.error(e);
+  }finally{
+    btn.disabled = false;
+    btn.textContent = prevLabel;
+  }
+}
+
+let toastTimer = null;
+function showToast(msg, ms=3000){
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=> el.classList.remove('show'), ms);
+}
+
+document.getElementById('modal-overlay').addEventListener('click', (e)=>{
+  if(e.target.id === 'modal-overlay') closeModal();
+});
+
+// タブバーの余白部分を右クリックすると、予想経費申請書を新しいタブで開く(裏ボタン)
+document.getElementById('tabs-bar').addEventListener('contextmenu', function(e){
+  if(e.target.closest('button')) return; // ボタンの上では通常の右クリックメニューのまま
+  e.preventDefault();
+  window.open('https://marusora8190.github.io/expense-request-system/expense_form.html', '_blank');
+});
+
+// お知らせ帯: 閉じるボタンで非表示にできる(このタブを開いている間だけ記憶)
+function dismissReloadNotice(){
+  document.getElementById('reload-notice').style.display = 'none';
+  try{ sessionStorage.setItem('reloadNoticeDismissed', '1'); }catch(e){}
+}
+try{
+  const navEntries = performance.getEntriesByType && performance.getEntriesByType('navigation');
+  const isReload = (navEntries && navEntries[0] && navEntries[0].type === 'reload')
+    || (performance.navigation && performance.navigation.type === 1);
+  if(isReload || sessionStorage.getItem('reloadNoticeDismissed') === '1'){
+    document.getElementById('reload-notice').style.display = 'none';
+    try{ sessionStorage.setItem('reloadNoticeDismissed', '1'); }catch(e){}
+  }
+}catch(e){}
+
+// 見出し・タブ部分をまとめて隠す/表示する(このタブを開いている間だけ記憶)
+function toggleTopControls(){
+  const el = document.getElementById('top-controls');
+  const btns = document.querySelectorAll('.collapse-toggle-btn');
+  const hidden = el.style.display === 'none';
+  el.style.display = hidden ? '' : 'none';
+  document.body.classList.toggle('controls-hidden', !hidden);
+  const label = hidden ? '▲　タブを隠す' : '▼　タブを表示';
+  btns.forEach(b=> b.textContent = label);
+  try{ sessionStorage.setItem('topControlsHidden', hidden ? '0' : '1'); }catch(e){}
+}
+try{
+  if(sessionStorage.getItem('topControlsHidden') === '1'){
+    document.getElementById('top-controls').style.display = 'none';
+    document.body.classList.add('controls-hidden');
+    document.querySelectorAll('.collapse-toggle-btn').forEach(b=> b.textContent = '▼　タブを表示');
+  }
+}catch(e){}
+
+loadAll();
+</script>
+</body>
+</html>
