@@ -802,8 +802,29 @@ function getInitialTab() {
   return "input";
 }
 
+function getInitialUpdated() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("updated") === "1";
+  } catch (e) {}
+  return false;
+}
+
 function App() {
   const [tab, setTab] = useState(getInitialTab);
+  const [justUpdated, setJustUpdated] = useState(getInitialUpdated);
+
+  useEffect(() => {
+    if (!justUpdated) return;
+    try {
+      const params = new URLSearchParams(window.location.search);
+      params.delete("updated");
+      params.delete("_");
+      const qs = params.toString();
+      window.history.replaceState(null, "", window.location.pathname + (qs ? "?" + qs : ""));
+    } catch (e) {}
+  }, []);
+
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [departments, setDepartments] = useState([]);
   const [items, setItems] = useState([]);
@@ -882,30 +903,48 @@ function App() {
       <div className="mb-4">
         <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
           <h1 className="text-xl font-semibold text-slate-900">営繕部貸与物品受付システム</h1>
-          <button
-            onClick={() => {
-              const params = new URLSearchParams(window.location.search);
-              params.set("tab", tab);
-              params.set("_", Date.now());
-              window.location.href = window.location.pathname + "?" + params.toString();
-            }}
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "6px",
-              background: "#ea580c",
-              color: "#fff",
-              border: "none",
-              borderRadius: "6px",
-              padding: "6px 12px",
-              fontSize: "13px",
-              fontWeight: 600,
-              cursor: "pointer",
-            }}
-            title="表示が古い場合はこのボタンで最新の状態に更新できます"
-          >
-            🔄 最新の状態に更新
-          </button>
+          {tab === "input" && (
+            justUpdated ? (
+              <span
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  color: "#15803d",
+                  fontSize: "13px",
+                  fontWeight: 600,
+                }}
+              >
+                ✓ 最新の状態に更新されました
+              </span>
+            ) : (
+              <button
+                onClick={() => {
+                  const params = new URLSearchParams(window.location.search);
+                  params.set("tab", tab);
+                  params.set("updated", "1");
+                  params.set("_", Date.now());
+                  window.location.href = window.location.pathname + "?" + params.toString();
+                }}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  background: "#ea580c",
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: "6px",
+                  padding: "6px 12px",
+                  fontSize: "13px",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
+                title="表示が古い場合はこのボタンで最新の状態に更新できます"
+              >
+                🔄 最新の状態に更新
+              </button>
+            )
+          )}
         </div>
         <p className="text-sm text-slate-500">貸与物品の入力・一覧・集計</p>
       </div>
