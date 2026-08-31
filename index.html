@@ -793,8 +793,17 @@ function toWareki(dateStr) {
   return `${era}${eraLabel}.${m}.${d}`;
 }
 
+function getInitialTab() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const t = params.get("tab");
+    if (t && ["input", "list", "summary", "masters"].includes(t)) return t;
+  } catch (e) {}
+  return "input";
+}
+
 function App() {
-  const [tab, setTab] = useState("input");
+  const [tab, setTab] = useState(getInitialTab);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [departments, setDepartments] = useState([]);
   const [items, setItems] = useState([]);
@@ -875,8 +884,10 @@ function App() {
           <h1 className="text-xl font-semibold text-slate-900">営繕部貸与物品受付システム</h1>
           <button
             onClick={() => {
-              const url = window.location.pathname + "?_=" + Date.now();
-              window.location.href = url;
+              const params = new URLSearchParams(window.location.search);
+              params.set("tab", tab);
+              params.set("_", Date.now());
+              window.location.href = window.location.pathname + "?" + params.toString();
             }}
             style={{
               display: "inline-flex",
