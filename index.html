@@ -231,6 +231,8 @@ input, select {
 }
 .row-applied { background: #fffbeb; }
 .row-applied:hover { background: #fef3c7; }
+.row-ordered { background: #eff6ff; }
+.row-ordered:hover { background: #dbeafe; }
 .legend-item {
   display: inline-flex;
   align-items: center;
@@ -245,6 +247,7 @@ input, select {
   border-radius: 3px;
 }
 .legend-applied { background: #fffbeb; border: 1px solid #fcd34d; }
+.legend-ordered { background: #eff6ff; border: 1px solid #93c5fd; }
 .logout-btn {
   margin-top: 16px;
   color: #b91c1c;
@@ -650,7 +653,7 @@ async function sb(path, options = {}) {
 }
 
 const DEPT_ORDER = ["営繕課", "電気課", "水道課", "造園課", "放送通信課", "建築課", "営繕部"];
-const STATUS_OPTIONS = ["申込済", "貸与済"];
+const STATUS_OPTIONS = ["申込済", "貸与済", "発注済"];
 const RECENT_ITEMS_KEY = "lendingApp_recentItems";
 const todayStr = () => new Date().toISOString().slice(0, 10);
 const uid = () => Math.random().toString(36).slice(2, 10);
@@ -1468,19 +1471,19 @@ function ListTab({ departments, items, itemByName, sizesByCategory, lockedDept }
         const data = await sb(q);
         setRows(data);
       } else {
-        // 「申込済」は日付が古くても一覧の上側に常に表示したいので、
+        // 「申込済」「発注済」は日付が古くても一覧の上側に常に表示したいので、
         // 日付による100件制限の影響を受けないよう別クエリで全件取得する。
         // 「貸与済」は従来通り新しい順に残り件数分だけ取得する。
         const f = baseFilters();
-        const appliedQ = `lending_records?select=*&order=record_date.desc,created_at.desc&limit=500${f}&status=eq.申込済`;
-        const appliedData = await sb(appliedQ);
-        const remaining = Math.max(0, 100 - appliedData.length);
+        const pinnedQ = `lending_records?select=*&order=record_date.desc,created_at.desc&limit=500${f}&status=in.(申込済,発注済)`;
+        const pinnedData = await sb(pinnedQ);
+        const remaining = Math.max(0, 100 - pinnedData.length);
         let lentData = [];
         if (remaining > 0) {
           const lentQ = `lending_records?select=*&order=record_date.desc,created_at.desc&limit=${remaining}${f}&status=eq.貸与済`;
           lentData = await sb(lentQ);
         }
-        setRows([...appliedData, ...lentData]);
+        setRows([...pinnedData, ...lentData]);
       }
     } catch (e) {
       setError(e.message);
@@ -1573,7 +1576,7 @@ function ListTab({ departments, items, itemByName, sizesByCategory, lockedDept }
   const editSizes = activeItem && activeItem.category ? sizesByCategory[activeItem.category] || [] : [];
 
   const sortedRows = useMemo(() => {
-    const priority = (r) => (r.status === "申込済" ? 0 : r.status === "貸与済" ? 1 : 2);
+    const priority = (r) => (r.status === "申込済" ? 0 : r.status === "発注済" ? 1 : r.status === "貸与済" ? 2 : 3);
     return [...rows].sort((a, b) => priority(a) - priority(b));
   }, [rows]);
 
@@ -1823,7 +1826,7 @@ function ListTab({ departments, items, itemByName, sizesByCategory, lockedDept }
                     key={r.id}
                     className={
                       "border-t border-slate-100 " +
-                      (r.status === "申込済" ? "row-applied" : "")
+                      (r.status === "申込済" ? "row-applied" : r.status === "発注済" ? "row-ordered" : "")
                     }
                   >
                     <td className="px-2 py-1.5 whitespace-nowrap">{toWareki(r.record_date)}</td>
@@ -1885,6 +1888,7 @@ function ListTab({ departments, items, itemByName, sizesByCategory, lockedDept }
       <div className="flex items-center gap-4 mt-2">
         <p className="text-xs text-slate-400">最新100件まで表示しています。</p>
         <span className="legend-item"><span className="legend-swatch legend-applied"></span>申込済</span>
+        <span className="legend-item"><span className="legend-swatch legend-ordered"></span>発注済</span>
       </div>
     </div>
   );
