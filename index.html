@@ -652,20 +652,6 @@ async function sb(path, options = {}) {
   return text ? JSON.parse(text) : null;
 }
 
-// Supabase は1回の読み込みで最大1000件までしか返さないため、
-// 集計のように全件が必要な場面では、1000件ずつ区切って最後まで読み込む。
-// 区切りの順番が毎回同じになるよう id 順に並べて取得する。
-async function sbAll(path, pageSize = 1000) {
-  const all = [];
-  const sep = path.includes("?") ? "&" : "?";
-  for (let offset = 0; ; offset += pageSize) {
-    const page = await sb(`${path}${sep}order=id&limit=${pageSize}&offset=${offset}`);
-    all.push(...(page || []));
-    if (!page || page.length < pageSize) break;
-  }
-  return all;
-}
-
 const DEPT_ORDER = ["営繕課", "電気課", "水道課", "造園課", "放送通信課", "建築課", "営繕部"];
 const STATUS_OPTIONS = ["申込済", "貸与済", "発注済"];
 const RECENT_ITEMS_KEY = "lendingApp_recentItems";
@@ -973,7 +959,7 @@ function App() {
             )
           )}
         </div>
-        <p className="text-sm text-slate-500">貸与物品の入力・一覧・集計</p>
+        <p className="text-sm text-slate-500">貸与物品の入力・一覧</p>
       </div>
 
       {loadError && (
@@ -996,7 +982,6 @@ function App() {
               {[
                 ["input", "入　力"],
                 ["list", "一　覧"],
-                ["summary", "集　計"],
                 ...(lockedDept ? [] : [["masters", "品目マスタ"]]),
               ].map(([key, label]) => (
                 <button
@@ -1653,7 +1638,7 @@ function ListTab({ departments, items, itemByName, sizesByCategory, lockedDept }
             <input
               value={filters.person}
               onChange={(e) => setFilters({ ...filters, person: e.target.value })}
-              placeholder="例: 青木年朗"
+              placeholder="例: 山田"
               className="w-full border border-slate-300 rounded px-2 py-1.5 text-sm"
             />
             {filters.person && (
@@ -2253,7 +2238,8 @@ function SummaryTab({ departments, lockedDept }) {
     if (year !== "all") {
       q += `&record_date=gte.${year}-01-01&record_date=lte.${year}-12-31`;
     }
-    sbAll(q)
+    q += "&limit=10000";
+    sb(q)
       .then(setRows)
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
