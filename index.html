@@ -1966,9 +1966,190 @@ function ListTab({ departments, items, itemByName, sizesByCategory, lockedDept }
         <span className="legend-item"><span className="legend-swatch legend-applied"></span>申込済</span>
         <span className="legend-item"><span className="legend-swatch legend-ordered"></span>発注済</span>
       </div>
+      {!isLocked && <CleanupSection onDeleted={load} />}
     </div>
   );
 }
+
+// ===== 古いデータの整理（管理者用URLでのみ表示） =====
+// 入力した日付より前の記録（一覧の「日付」欄で判断）を、現況に関係なくまとめて削除する。
+// ・消すのは貸与記録（lending_records）だけ。品目マスタ・サイズの選択肢などは消さない。
+// ・削除には管理者パスワードが必要（sb の DELETE が getAdminToken を使う）。
+function cleanupDateLabel(s) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s || "");
+  if (!m) return "";
+  return `${Number(m[1])}年${Number(m[2])}月${Number(m[3])}日`;
+}
+
+// 1000件ずつ区切って、対象の記録をすべて読み込む
+async function fetchCleanupTargets(date) {
+  const all = [];
+  const PAGE = 1000;
+  for (let from = 0; ; from += PAGE) {
+    const rows = await sb(`lending_records?select=id&record_date=lt.${date}&order=id&limit=${PAGE}&offset=${from}`);
+    all.push(...(rows || []));
+    if (!rows || rows.length < PAGE) break;
+  }
+  return all;
+}
+
+function CleanupSection({ onDeleted }) {
+  const [open, setOpen] = useState(false);
+  const [oldest, setOldest] = useState("読み込み中…");
+  const [date, setDate] = useState("");
+  const [targets, setTargets] = useState(null); // { date, ids }
+  const [result, setResult] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const refreshOldest = useCallback(async () => {
+    try {
+      const rows = await sb("lending_records?select=record_date&order=record_date.asc&limit=1");
+      setOldest(
+        rows && rows.length
+          ? `いちばん古い記録の日付：${cleanupDateLabel(rows[0].record_date)}`
+          : "記録はまだありません。"
+      );
+    } catch (e) {
+      setOldest("いちばん古い記録の日付を読み込めませんでした。");
+    }
+  }, []);
+
+  useEffect(() => {
+    if (open) refreshOldest();
+  }, [open, refreshOldest]);
+
+  const changeDate = (v) => {
+    setDate(v);
+    setTargets(null);
+    setResult("");
+  };
+
+  const checkTargets = async () => {
+    setTargets(null);
+    setResult("");
+    if (!date) {
+      setResult("日付を入力してください。");
+      return;
+    }
+    setBusy(true);
+    setResult("対象を数えています…");
+    try {
+      const rows = await fetchCleanupTargets(date);
+      if (!rows.length) {
+        setResult(`${cleanupDateLabel(date)}より前の記録はありません。`);
+      } else {
+        setTargets({ date, ids: rows.map((r) => r.id) });
+        setResult("");
+      }
+    } catch (e) {
+      setResult("対象を数えられませんでした：" + e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const runCleanup = async () => {
+    if (!targets) return;
+    if (date !== targets.date) {
+      setTargets(null);
+      setResult("日付が変わったため、もう一度「対象を確認する」を押してください。");
+      return;
+    }
+    // 先に管理者パスワードを確認してから、最後の確認を出す
+    try {
+      await getAdminToken();
+    } catch (e) {
+      setResult(e.message);
+      return;
+    }
+    const n = targets.ids.length;
+    if (
+      !window.confirm(
+        `${cleanupDateLabel(targets.date)}より前の記録 ${n}件を削除します。\n申込済・発注済のものも含めて削除され、元に戻せません。\n\n本当に削除しますか？`
+      )
+    )
+      return;
+
+    setBusy(true);
+    setResult("削除しています…（画面を閉じずにお待ちください）");
+    let deleted = 0;
+    let errorMsg = "";
+    try {
+      for (let i = 0; i < targets.ids.length; i += 100) {
+        const chunk = targets.ids.slice(i, i + 100).join(",");
+        const res = await sb(`lending_records?id=in.(${chunk})&select=id`, { method: "DELETE" });
+        deleted += (res || []).length;
+      }
+    } catch (e) {
+      errorMsg = e.message;
+    }
+    let msg = `${deleted}件の記録を削除しました。`;
+    if (deleted < n) {
+      msg += `\n${n - deleted}件は削除できませんでした。` + (errorMsg ? `（${errorMsg}）` : "（管理者パスワードを確認してください）");
+    }
+    setTargets(null);
+    setResult(msg);
+    setBusy(false);
+    refreshOldest();
+    if (onDeleted) onDeleted();
+  };
+
+  return (
+    <details
+      className="border border-slate-200 rounded"
+      style={{ marginTop: "28px", background: "#fff" }}
+      onToggle={(e) => setOpen(e.currentTarget.open)}
+    >
+      <summary className="px-4 py-2 text-sm font-medium text-slate-500" style={{ cursor: "pointer" }}>古いデータの整理</summary>
+      <div className="px-4 text-sm text-slate-700" style={{ paddingBottom: "16px", lineHeight: 1.7 }}>
+        <p className="mb-2">
+          入力した日付より前の記録（一覧の「日付」欄で判断します）を、申込済・発注済・貸与済に関係なくまとめて削除します。品目マスタやサイズの選択肢は削除しません。削除した記録は元に戻せません。
+        </p>
+        <p className="mb-2 text-slate-500">{oldest}</p>
+        <div className="flex items-center gap-3" style={{ flexWrap: "wrap" }}>
+          <input
+            type="date"
+            value={date}
+            onChange={(e) => changeDate(e.target.value)}
+            className="border border-slate-300 rounded px-2 py-1.5 text-sm"
+          />
+          <span>より前の記録</span>
+          <button
+            type="button"
+            onClick={checkTargets}
+            disabled={busy}
+            className="text-sm border border-slate-300 text-slate-700 rounded px-3 py-1.5"
+            style={{ opacity: busy ? 0.5 : 1 }}
+          >
+            対象を確認する
+          </button>
+        </div>
+        {targets && (
+          <div className="px-3 py-2 bg-slate-50 rounded" style={{ marginTop: "12px" }}>
+            <div>
+              {cleanupDateLabel(targets.date)}より前の記録：<strong>{targets.ids.length}件</strong>
+            </div>
+            <button
+              type="button"
+              onClick={runCleanup}
+              disabled={busy}
+              className="mt-2 text-sm border border-red-300 bg-red-50 text-red-700 rounded px-3 py-1.5"
+              style={{ opacity: busy ? 0.5 : 1, fontWeight: 600 }}
+            >
+              この{targets.ids.length}件を削除する
+            </button>
+          </div>
+        )}
+        {result && (
+          <div className="px-3 py-2 bg-slate-50 rounded" style={{ marginTop: "12px", whiteSpace: "pre-line" }}>
+            {result}
+          </div>
+        )}
+      </div>
+    </details>
+  );
+}
+// ===== ここまで：古いデータの整理 =====
 
 function MastersTab({ items, onChanged, departments }) {
   const [editNames, setEditNames] = useState({});
