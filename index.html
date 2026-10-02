@@ -1658,6 +1658,7 @@ function ListTab({ departments, items, itemByName, sizesByCategory, lockedDept }
 
   return (
     <div>
+      {!isLocked && <CleanupSection onDeleted={load} />}
       <div className="mb-3 grid grid-cols-4 sm:grid-cols-6 gap-3">
         <Field label="部署">
           {isLocked ? (
@@ -1966,12 +1967,11 @@ function ListTab({ departments, items, itemByName, sizesByCategory, lockedDept }
         <span className="legend-item"><span className="legend-swatch legend-applied"></span>申込済</span>
         <span className="legend-item"><span className="legend-swatch legend-ordered"></span>発注済</span>
       </div>
-      {!isLocked && <CleanupSection onDeleted={load} />}
     </div>
   );
 }
 
-// ===== 古いデータの整理（管理者用URLでのみ表示） =====
+// ===== 古いデータの整理（管理者用URLでのみ表示。一覧のいちばん上） =====
 // 入力した日付より前の記録（一覧の「日付」欄で判断）を、現況に関係なくまとめて削除する。
 // ・消すのは貸与記録（lending_records）だけ。品目マスタ・サイズの選択肢などは消さない。
 // ・削除には管理者パスワードが必要（sb の DELETE が getAdminToken を使う）。
@@ -2097,10 +2097,13 @@ function CleanupSection({ onDeleted }) {
   return (
     <details
       className="border border-slate-200 rounded"
-      style={{ marginTop: "28px", background: "#fff" }}
+      style={{ marginBottom: "12px", background: "#fff", borderColor: "#d97706" }}
       onToggle={(e) => setOpen(e.currentTarget.open)}
     >
-      <summary className="px-4 py-2 text-sm font-medium text-slate-500" style={{ cursor: "pointer" }}>古いデータの整理</summary>
+      <summary className="px-4 py-2 font-medium" style={{ cursor: "pointer", fontSize: "15px", color: "#b45309" }}>
+        🗑 古いデータの整理
+        <span className="text-xs text-slate-400" style={{ fontWeight: 400, marginLeft: "8px" }}>ここを押すと開きます</span>
+      </summary>
       <div className="px-4 text-sm text-slate-700" style={{ paddingBottom: "16px", lineHeight: 1.7 }}>
         <p className="mb-2">
           入力した日付より前の記録（一覧の「日付」欄で判断します）を、申込済・発注済・貸与済に関係なくまとめて削除します。品目マスタやサイズの選択肢は削除しません。削除した記録は元に戻せません。
