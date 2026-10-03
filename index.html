@@ -2097,12 +2097,20 @@ function CleanupSection({ onDeleted }) {
   return (
     <details
       className="border border-slate-200 rounded"
-      style={{ marginBottom: "12px", background: "#fff", borderColor: "#d97706" }}
+      style={{
+        marginBottom: "12px",
+        background: "#fff",
+        borderColor: "#d97706",
+        width: open ? "auto" : "fit-content",
+        maxWidth: "100%",
+      }}
       onToggle={(e) => setOpen(e.currentTarget.open)}
     >
       <summary className="px-4 py-2 font-medium" style={{ cursor: "pointer", fontSize: "15px", color: "#b45309" }}>
         🗑 古いデータの整理
-        <span className="text-xs text-slate-400" style={{ fontWeight: 400, marginLeft: "8px" }}>ここを押すと開きます</span>
+        <span className="text-xs text-slate-400" style={{ fontWeight: 400, marginLeft: "8px" }}>
+          {open ? "ここを押すと閉じます" : "ここを押すと開きます"}
+        </span>
       </summary>
       <div className="px-4 text-sm text-slate-700" style={{ paddingBottom: "16px", lineHeight: 1.7 }}>
         <p className="mb-2">
