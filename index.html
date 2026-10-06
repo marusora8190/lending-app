@@ -887,7 +887,7 @@ function getInitialTab() {
   try {
     const params = new URLSearchParams(window.location.search);
     const t = params.get("tab");
-    if (t && ["input", "list", "summary", "masters"].includes(t)) return t;
+    if (t && ["input", "list", "summary", "masters", "settings"].includes(t)) return t;
   } catch (e) {}
   return "input";
 }
@@ -1059,7 +1059,7 @@ function App() {
               {[
                 ["input", "入　力"],
                 ["list", "一　覧"],
-                ...(lockedDept ? [] : [["masters", "品目マスタ"]]),
+                ...(lockedDept ? [] : [["masters", "品目マスタ"], ["settings", "設　定"]]),
               ].map(([key, label]) => (
                 <button
                   key={key}
@@ -1100,6 +1100,9 @@ function App() {
               departments={departments.length ? departments : DEPT_ORDER}
               lockedDept={lockedDept}
             />
+          )}
+          {tab === "settings" && !lockedDept && (
+            <SettingsTab departments={departments.length ? departments : DEPT_ORDER} />
           )}
           {tab === "masters" && !lockedDept && (
             <MastersTab
@@ -2161,6 +2164,236 @@ function CleanupSection({ onDeleted }) {
   );
 }
 // ===== ここまで：古いデータの整理 =====
+
+// ===== 設定（管理者用URLでのみ表示） =====
+// マスターファイルと修正依頼メモのうち、②に関係することをまとめた画面。
+// このファイルは公開されているため、個人のメールアドレス・パスワードの保管場所・
+// 共有サーバーの場所などは書かない（それらはマスターファイルを見る）。
+const SETTINGS_INFO_DATE = "2026年10月5日";
+
+function SettingsLink({ href, children }) {
+  return (
+    <a href={href} target="_blank" rel="noopener noreferrer" style={{ color: "#1d4ed8", wordBreak: "break-all" }}>
+      {children || href}
+    </a>
+  );
+}
+
+function SettingsSection({ title, children, defaultOpen }) {
+  const [open, setOpen] = useState(!!defaultOpen);
+  return (
+    <details
+      open={!!defaultOpen}
+      onToggle={(e) => setOpen(e.currentTarget.open)}
+      style={{ marginBottom: "10px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "6px" }}
+    >
+      <summary style={{ cursor: "pointer", fontSize: "15px", color: "#334155", padding: "8px 16px" }}>
+        {title}
+        <span style={{ fontSize: "12px", color: "#94a3b8", marginLeft: "8px" }}>
+          {open ? "ここを押すと閉じます" : "ここを押すと開きます"}
+        </span>
+      </summary>
+      <div style={{ padding: "0 16px 16px", fontSize: "14px", color: "#334155", lineHeight: 1.8 }}>{children}</div>
+    </details>
+  );
+}
+
+function SettingsList({ items }) {
+  return (
+    <ul style={{ margin: "4px 0", paddingLeft: "1.4em" }}>
+      {items.map((t, i) => (
+        <li key={i}>{t}</li>
+      ))}
+    </ul>
+  );
+}
+
+function SettingsTab({ departments }) {
+  const [copied, setCopied] = useState("");
+  const baseUrl = useMemo(() => {
+    try {
+      return window.location.origin + window.location.pathname;
+    } catch (e) {
+      return "https://marusora8190.github.io/lending-app/";
+    }
+  }, []);
+
+  const copyText = async (text) => {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch (e) {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      try {
+        document.execCommand("copy");
+      } catch (e2) {}
+      document.body.removeChild(ta);
+    }
+    setCopied(text);
+    setTimeout(() => setCopied((c) => (c === text ? "" : c)), 2000);
+  };
+
+  const sub = { fontSize: "13px", color: "#64748b" };
+  const h = { fontSize: "14px", color: "#b45309", margin: "12px 0 4px" };
+  const code = { background: "#f1f5f9", borderRadius: "4px", padding: "0 4px", fontFamily: "monospace" };
+
+  return (
+    <div>
+      <div style={{ marginBottom: "12px" }}>
+        <div style={{ fontSize: "16px", color: "#0f172a" }}>設定・管理メモ</div>
+        <div style={sub}>
+          このアプリ（②貸与物品受付表）の管理に必要なことをまとめています。内容は {SETTINGS_INFO_DATE} 時点のマスターファイル・修正依頼メモにもとづきます。
+          くわしくは共有サーバーのマスターファイルを見てください。
+        </div>
+      </div>
+
+      <SettingsSection title="🔗 このアプリのURL（部署ごとの配布用）" defaultOpen>
+        <div>
+          管理者用（このページ）：<SettingsLink href={baseUrl} />
+        </div>
+        <div style={{ ...sub, marginTop: "4px" }}>
+          URLの最後に <span style={code}>?dept=部署名</span> を付けると、その部署専用の画面になります（部署が固定され、「品目マスタ」「設定」「古いデータの整理」は出ません）。
+        </div>
+        <div style={h}>部署用のURL</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+          {departments.map((d) => {
+            const url = baseUrl + "?dept=" + encodeURIComponent(d);
+            return (
+              <div key={d} style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                <span style={{ minWidth: "6em" }}>{d}</span>
+                <SettingsLink href={url} />
+                <button
+                  type="button"
+                  onClick={() => copyText(url)}
+                  style={{ fontSize: "12px", border: "1px solid #cbd5e1", borderRadius: "4px", padding: "2px 8px", background: "#fff", color: "#475569", cursor: "pointer" }}
+                >
+                  {copied === url ? "コピーしました" : "コピー"}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      </SettingsSection>
+
+      <SettingsSection title="🛠 修正を頼むとき（Claudeへの依頼の手順）">
+        <ol style={{ margin: "4px 0", paddingLeft: "1.4em" }}>
+          <li>新しいチャットを開き、「修正を頼むときの依頼メモ.txt」と「マスターファイル（.md）」を添付する。</li>
+          <li>依頼メモのひな形をコピーして、「直したいアプリ」「直したい内容」を書いて送る。</li>
+          <li>
+            <strong>アプリのファイル（index.html）は添付しない。</strong>Claudeが作業の直前にGitHubから最新版を取り直して直します（手元の古いファイルをもとに直すと、ほかで加えた修正が消えるため）。
+          </li>
+          <li>受け取ったファイルをアップロードしたら、同じチャットで「アップロードしました。確認してください。」と送る。</li>
+        </ol>
+        <div style={h}>アップロード先（ファイルをドラッグして「Commit changes」を押す）</div>
+        <SettingsLink href="https://github.com/marusora8190/lending-app/upload/main" />
+        <SettingsList
+          items={[
+            "ファイル名は index.html のまま。「index (1).html」などになっていたら、元の名前に直してからアップロードする。",
+            "1つのアプリは、1つのチャットでだけ直す。別のチャットで直す前に、前のチャットのアップロードを済ませる。",
+            "日にちが空いたとき・別のチャットでアップロードしたあとは、「GitHubから最新版を取り直してから続けてください」と伝える。",
+            "ファイルが大きい（約3MB）ため、GitHubの画面で直接書き換えるのはむずかしい。修正はClaudeに頼む。",
+          ]}
+        />
+      </SettingsSection>
+
+      <SettingsSection title="⚠ 絶対に消してはいけない機能">
+        <div style={sub}>修正のたびに、Claudeがこれらが残っているかを確認します。</div>
+        <div style={h}>削除のときの管理者パスワード</div>
+        <div>
+          <span style={code}>ADMIN_EMAIL</span> ／ <span style={code}>getAdminToken</span>
+        </div>
+        <div style={sub}>
+          データベースは、削除を管理者アカウントだけに限っています。これが消えると、削除ボタンを押しても実際には削除されません（再読み込みすると記録が戻ってきます）。
+        </div>
+        <div style={h}>1000件対策の部品</div>
+        <div>
+          <span style={code}>fetchCleanupTargets</span>（「古いデータの整理」で使用）
+        </div>
+        <div style={sub}>
+          データベースは1回に1000件までしか返さないため、1000件ずつ区切ってすべて読み込みます。これが消えると、1000件を超えたときに古い記録が整理しきれなくなります。
+        </div>
+      </SettingsSection>
+
+      <SettingsSection title="🔒 データの守り方・管理者パスワード">
+        <SettingsList
+          items={[
+            "見る・入力・編集は、パスワード無しで使えます。",
+            "記録や品目マスタの削除だけは、管理者パスワードが必要です。削除しようとするとパスワード欄が出ます（一度入れると、そのタブを閉じるまで再入力不要）。",
+            "パスワードがわからないときは「やめる」を押せば、削除されずにそのまま残ります。",
+            "パスワードはこの画面にもマスターファイルにも書いていません（管理者が別に保管）。忘れた・変えたいときは、Claudeに頼めば変更できます。",
+            "部署名とサイズの選択肢は、データベース側で書き換えできない設定になっています。",
+          ]}
+        />
+      </SettingsSection>
+
+      <SettingsSection title="💾 バックアップ">
+        <div style={h}>自動バックアップ（週1回）</div>
+        <SettingsList
+          items={[
+            "毎週日曜の午前3時ごろ、データベースの全部の表を自動で控えています。",
+            "直近8週間分はすべて保存。それより古いものは、各月の最初の1回分を1年間保存。",
+            "元に戻したいときは、Claudeに「backup_auto から ○○テーブルを△月△日の状態に戻して」と頼みます。",
+          ]}
+        />
+        <div style={h}>手動バックアップ（3〜6か月に1回が目安）</div>
+        <SettingsList
+          items={[
+            "共有サーバーの「①〜⑥バックアップ」フォルダにある「バックアップを取る.bat」をダブルクリックします。",
+            "年度末や、大きな修正の前にも取っておくと安心です。",
+            "くわしい手順は、フォルダの中の「はじめにお読みください.txt」とマスターファイルを見てください。",
+          ]}
+        />
+      </SettingsSection>
+
+      <SettingsSection title="😴 自動休止の対策">
+        <SettingsList
+          items={[
+            "データベースは、7日間だれも使わないと自動で休止します。",
+            "それを防ぐため、3日おきの午前10時ごろに自動で接続しています（非公開の supabase-keepalive で実行）。",
+            "下のページで「Scheduled」の緑のチェックが3日おきに並んでいれば正常です。赤い×があればClaudeに相談してください。",
+          ]}
+        />
+        <SettingsLink href="https://github.com/marusora8190/supabase-keepalive/actions/workflows/keepalive.yml" />
+      </SettingsSection>
+
+      <SettingsSection title="🆘 困ったときは">
+        <SettingsList
+          items={[
+            "画面が真っ白・古い表示のまま：まずシークレットウィンドウで開いてみる。入力画面の「🔄 Update」でも最新にできます。",
+            "削除しようとしたらパスワード欄が出た：正常な動きです。",
+            "パスワード欄が出ないのに、削除した記録が再読み込みで戻ってくる：管理者パスワードの仕組みが消えています。Claudeに確認を頼んでください。",
+            "アップロード後、反映まで数分かかることがあります。GitHubの「Actions」で「pages build and deployment」が緑のチェックになれば公開完了です。",
+            "心配なときは、Claudeに「1000件対策と管理者パスワードの仕組みが残っているか確認してください」と頼めば、変更履歴から確かめられます。",
+          ]}
+        />
+      </SettingsSection>
+
+      <SettingsSection title="📋 メモ（このアプリの仕組み・残っている作業）">
+        <SettingsList
+          items={[
+            "使っているデータの表：items（品目マスタ）・lending_records（貸与の記録）・size_options（サイズの選択肢）。",
+            "「古いデータの整理」は、一覧画面のいちばん上にあります（管理者用URLのみ）。指定した日付より前の記録を、現況に関係なくまとめて削除します。品目マスタとサイズの選択肢は消しません。",
+            "集計画面はメニューから外しています（プログラムの中に部品は残っていますが、使われていません）。",
+            "残っている作業：GitHubの lending-app の中にある使っていない payment_tracker.html の削除（④の古いコピー。削除して問題なし）。",
+            "残っている作業：実際に配っている部署用URLを、マスターファイルに書き込む（上の「このアプリのURL」が参考になります）。",
+          ]}
+        />
+      </SettingsSection>
+
+      <SettingsSection title="🌐 関連ページ">
+        <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+          <div>GitHub（ファイルの置き場所）：<SettingsLink href="https://github.com/marusora8190/lending-app" /></div>
+          <div>変更履歴：<SettingsLink href="https://github.com/marusora8190/lending-app/commits/main/index.html" /></div>
+          <div>公開状況（Actions）：<SettingsLink href="https://github.com/marusora8190/lending-app/actions" /></div>
+          <div>Supabase（データベースの管理画面。ログインが必要）：<SettingsLink href="https://supabase.com/dashboard/project/zhxuntrhxnrssqpvcmvl" /></div>
+        </div>
+      </SettingsSection>
+    </div>
+  );
+}
+// ===== ここまで：設定 =====
 
 function MastersTab({ items, onChanged, departments }) {
   const [editNames, setEditNames] = useState({});
