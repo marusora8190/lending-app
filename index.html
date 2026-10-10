@@ -2005,8 +2005,11 @@ function ListTab({ departments, items, itemByName, sizesByCategory, lockedDept }
 }
 
 // ===== 古いデータの整理（管理者用URLでのみ表示。一覧のいちばん上） =====
-// 入力した日付より前の記録（一覧の「日付」欄で判断）を、現況に関係なくまとめて削除する。
-// ・消すのは貸与記録（lending_records）だけ。品目マスタ・サイズの選択肢などは消さない。
+// 入力した日付より前の記録を、チェックを付けた種類だけ削除する（2026年10月10日から種類を選べるようにした）。
+// ・貸与の記録（lending_records）：一覧の「日付」欄で判断。申込済・発注済・貸与済に関係なく削除。
+// ・購入の記録（lending_purchases）：「購入日」で判断。
+// ・請求書の金額（lending_invoices）：「何年何月分」で判断し、入力した日付の月より前の月の分を削除。
+// ・品目マスタ・サイズの選択肢などは消さない。
 // ・削除には管理者パスワードが必要（sb の DELETE が getAdminToken を使う）。
 function cleanupDateLabel(s) {
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s || "");
@@ -2026,25 +2029,54 @@ async function fetchCleanupTargets(date) {
   return all;
 }
 
+// 請求書の金額のうち、date の月より前の月の分を選ぶ条件（年・月は "2026"・"04" のような文字で保存している）
+function invoiceBeforeFilter(date) {
+  const y = date.slice(0, 4);
+  const m = date.slice(5, 7);
+  return `&or=(billing_year.lt.${y},and(billing_year.eq.${y},billing_month.lt.${m}))`;
+}
+
+function cleanupMonthLabel(date) {
+  return `${Number(date.slice(0, 4))}年${Number(date.slice(5, 7))}月`;
+}
+
+const CLEANUP_KINDS = [
+  { key: "lending", label: "貸与の記録", table: "lending_records" },
+  { key: "purchase", label: "購入の記録", table: "lending_purchases" },
+  { key: "invoice", label: "請求書の金額", table: "lending_invoices" },
+];
+
 function CleanupSection({ onDeleted }) {
   const [open, setOpen] = useState(false);
-  const [oldest, setOldest] = useState("読み込み中…");
+  const [oldest, setOldest] = useState({ lending: "読み込み中…", purchase: "読み込み中…", invoice: "読み込み中…" });
   const [date, setDate] = useState("");
-  const [targets, setTargets] = useState(null); // { date, ids }
+  // 最初は、これまでと同じ「貸与の記録」だけにチェックを付けておく
+  const [kinds, setKinds] = useState({ lending: true, purchase: false, invoice: false });
+  const [targets, setTargets] = useState(null); // { date, kinds, ids: { lending:[], purchase:[], invoice:[] } }
   const [result, setResult] = useState("");
   const [busy, setBusy] = useState(false);
 
   const refreshOldest = useCallback(async () => {
+    const next = {};
     try {
       const rows = await sb("lending_records?select=record_date&order=record_date.asc&limit=1");
-      setOldest(
-        rows && rows.length
-          ? `いちばん古い記録の日付：${cleanupDateLabel(rows[0].record_date)}`
-          : "記録はまだありません。"
-      );
+      next.lending = rows && rows.length ? `いちばん古い日付：${cleanupDateLabel(rows[0].record_date)}` : "記録はまだありません";
     } catch (e) {
-      setOldest("いちばん古い記録の日付を読み込めませんでした。");
+      next.lending = "いちばん古い日付を読み込めませんでした";
     }
+    try {
+      const rows = await sb("lending_purchases?select=purchase_date&order=purchase_date.asc&limit=1");
+      next.purchase = rows && rows.length ? `いちばん古い購入日：${cleanupDateLabel(rows[0].purchase_date)}` : "記録はまだありません";
+    } catch (e) {
+      next.purchase = "いちばん古い購入日を読み込めませんでした";
+    }
+    try {
+      const rows = await sb("lending_invoices?select=billing_year,billing_month&order=billing_year.asc,billing_month.asc&limit=1");
+      next.invoice = rows && rows.length ? `いちばん古いもの：${Number(rows[0].billing_year)}年${Number(rows[0].billing_month)}月分` : "記録はまだありません";
+    } catch (e) {
+      next.invoice = "いちばん古いものを読み込めませんでした";
+    }
+    setOldest(next);
   }, []);
 
   useEffect(() => {
@@ -2057,9 +2089,19 @@ function CleanupSection({ onDeleted }) {
     setResult("");
   };
 
+  const toggleKind = (key) => {
+    setKinds((k) => ({ ...k, [key]: !k[key] }));
+    setTargets(null);
+    setResult("");
+  };
+
   const checkTargets = async () => {
     setTargets(null);
     setResult("");
+    if (!kinds.lending && !kinds.purchase && !kinds.invoice) {
+      setResult("消したい種類にチェックを付けてください。");
+      return;
+    }
     if (!date) {
       setResult("日付を入力してください。");
       return;
@@ -2071,11 +2113,15 @@ function CleanupSection({ onDeleted }) {
     setBusy(true);
     setResult("対象を数えています…");
     try {
-      const rows = await fetchCleanupTargets(date);
-      if (!rows.length) {
-        setResult(`${cleanupDateLabel(date)}より前の記録はありません。`);
+      const ids = { lending: [], purchase: [], invoice: [] };
+      if (kinds.lending) ids.lending = (await fetchCleanupTargets(date)).map((r) => r.id);
+      if (kinds.purchase) ids.purchase = (await fetchAllPurchases(`&purchase_date=lt.${date}`)).map((r) => r.id);
+      if (kinds.invoice) ids.invoice = (await fetchAllInvoices(invoiceBeforeFilter(date))).map((r) => r.id);
+      const total = ids.lending.length + ids.purchase.length + ids.invoice.length;
+      if (!total) {
+        setResult(`${cleanupDateLabel(date)}より前の、チェックを付けた種類の記録はありません。`);
       } else {
-        setTargets({ date, ids: rows.map((r) => r.id) });
+        setTargets({ date, kinds: { ...kinds }, ids });
         setResult("");
       }
     } catch (e) {
@@ -2084,6 +2130,12 @@ function CleanupSection({ onDeleted }) {
       setBusy(false);
     }
   };
+
+  const targetLines = (t) =>
+    CLEANUP_KINDS.filter((k) => t.kinds[k.key]).map((k) => {
+      const when = k.key === "invoice" ? `${cleanupMonthLabel(t.date)}より前の月の分` : `${cleanupDateLabel(t.date)}より前`;
+      return { key: k.key, text: `${k.label}（${when}）：${t.ids[k.key].length}件` };
+    });
 
   const runCleanup = async () => {
     if (!targets) return;
@@ -2099,33 +2151,36 @@ function CleanupSection({ onDeleted }) {
       setResult(e.message);
       return;
     }
-    const n = targets.ids.length;
-    if (
-      !window.confirm(
-        `${cleanupDateLabel(targets.date)}より前の記録 ${n}件を削除します。\n申込済・発注済のものも含めて削除され、元に戻せません。\n\n本当に削除しますか？`
-      )
-    )
-      return;
+    const n = targets.ids.lending.length + targets.ids.purchase.length + targets.ids.invoice.length;
+    const lines = targetLines(targets).map((l) => "・" + l.text).join("\n");
+    const lendingNote = targets.kinds.lending && targets.ids.lending.length ? "\n貸与の記録は、申込済・発注済のものも含めて削除されます。" : "";
+    if (!window.confirm(`次の合計${n}件を削除します。元に戻せません。\n\n${lines}${lendingNote}\n\n本当に削除しますか？`)) return;
 
     setBusy(true);
     setResult("削除しています…（画面を閉じずにお待ちください）");
-    let deleted = 0;
-    let errorMsg = "";
-    try {
-      for (let i = 0; i < targets.ids.length; i += 100) {
-        const chunk = targets.ids.slice(i, i + 100).join(",");
-        const res = await sb(`lending_records?id=in.(${chunk})&select=id`, { method: "DELETE" });
-        deleted += (res || []).length;
+    const msgs = [];
+    for (const k of CLEANUP_KINDS) {
+      if (!targets.kinds[k.key]) continue;
+      const list = targets.ids[k.key];
+      let deleted = 0;
+      let errorMsg = "";
+      try {
+        for (let i = 0; i < list.length; i += 100) {
+          const chunk = list.slice(i, i + 100).join(",");
+          const res = await sb(`${k.table}?id=in.(${chunk})&select=id`, { method: "DELETE" });
+          deleted += (res || []).length;
+        }
+      } catch (e) {
+        errorMsg = e.message;
       }
-    } catch (e) {
-      errorMsg = e.message;
-    }
-    let msg = `${deleted}件の記録を削除しました。`;
-    if (deleted < n) {
-      msg += `\n${n - deleted}件は削除できませんでした。` + (errorMsg ? `（${errorMsg}）` : "（管理者パスワードを確認してください）");
+      let m = `${k.label}：${deleted}件を削除しました。`;
+      if (deleted < list.length) {
+        m += `（${list.length - deleted}件は削除できませんでした` + (errorMsg ? `：${errorMsg}）` : "。管理者パスワードを確認してください）");
+      }
+      msgs.push(m);
     }
     setTargets(null);
-    setResult(msg);
+    setResult(msgs.join("\n"));
     setBusy(false);
     refreshOldest();
     if (onDeleted) onDeleted();
@@ -2151,9 +2206,23 @@ function CleanupSection({ onDeleted }) {
       </summary>
       <div className="px-4 text-sm text-slate-700" style={{ paddingBottom: "16px", lineHeight: 1.7 }}>
         <p className="mb-2">
-          入力した日付より前の記録（一覧の「日付」欄で判断します）を、申込済・発注済・貸与済に関係なくまとめて削除します。品目マスタやサイズの選択肢は削除しません。削除した記録は元に戻せません。入力できる日付は今日までです（入力した日の記録は残ります）。
+          入力した日付より前の記録を、チェックを付けた種類だけまとめて削除します。品目マスタやサイズの選択肢は削除しません。削除した記録は元に戻せません。入力できる日付は今日までです（入力した日の記録は残ります）。
         </p>
-        <p className="mb-2 text-slate-500">{oldest}</p>
+        <div className="mb-2">
+          {CLEANUP_KINDS.map((k) => (
+            <label key={k.key} className="flex items-center gap-3" style={{ flexWrap: "wrap", cursor: "pointer" }}>
+              <input type="checkbox" checked={kinds[k.key]} onChange={() => toggleKind(k.key)} />
+              <span style={{ minWidth: "7em", fontWeight: 600 }}>{k.label}</span>
+              <span className="text-xs text-slate-500">
+                {k.key === "lending" && "一覧の「日付」で判断。申込済・発注済・貸与済に関係なく削除"}
+                {k.key === "purchase" && "「購入日」で判断"}
+                {k.key === "invoice" && "「何年何月分」で判断。入力した日付の月より前の月の分を削除"}
+                {"　／　"}
+                {oldest[k.key]}
+              </span>
+            </label>
+          ))}
+        </div>
         <div className="flex items-center gap-3" style={{ flexWrap: "wrap" }}>
           <input
             type="date"
@@ -2175,9 +2244,11 @@ function CleanupSection({ onDeleted }) {
         </div>
         {targets && (
           <div className="px-3 py-2 bg-slate-50 rounded" style={{ marginTop: "12px" }}>
-            <div>
-              {cleanupDateLabel(targets.date)}より前の記録：<strong>{targets.ids.length}件</strong>
-            </div>
+            {targetLines(targets).map((l) => (
+              <div key={l.key}>
+                <strong>{l.text}</strong>
+              </div>
+            ))}
             <button
               type="button"
               onClick={runCleanup}
@@ -2185,7 +2256,7 @@ function CleanupSection({ onDeleted }) {
               className="mt-2 text-sm border border-red-300 bg-red-50 text-red-700 rounded px-3 py-1.5"
               style={{ opacity: busy ? 0.5 : 1, fontWeight: 600 }}
             >
-              この{targets.ids.length}件を削除する
+              この合計{targets.ids.lending.length + targets.ids.purchase.length + targets.ids.invoice.length}件を削除する
             </button>
           </div>
         )}
@@ -2592,7 +2663,10 @@ function SettingsTab({ departments }) {
           <span style={code}>fetchCleanupTargets</span>（「古いデータの整理」で使用）
         </div>
         <div>
-          <span style={code}>fetchAllPurchases</span>（「購入入力」「購入一覧」「請求書照合」の3か所で使用。2026年10月10日追加）
+          <span style={code}>fetchAllPurchases</span>（「購入入力」「購入一覧」「請求書照合」「古いデータの整理」の4か所で使用。2026年10月10日追加）
+        </div>
+        <div>
+          <span style={code}>fetchAllInvoices</span>（「請求書照合」「古いデータの整理」の2か所で使用。2026年10月10日追加）
         </div>
         <div style={sub}>
           データベースは1回に1000件までしか返さないため、1000件ずつ区切ってすべて読み込みます。これが消えると、1000件を超えたときに古い記録が整理しきれなくなったり、購入の一覧や請求書照合の合計が足りなくなったりします。
@@ -2658,8 +2732,7 @@ function SettingsTab({ departments }) {
           items={[
             "使っているデータの表：items（品目マスタ）・lending_records（貸与の記録）・size_options（サイズの選択肢）・lending_purchases（購入の記録）・lending_invoices（請求書の金額。業者ごと・月ごと）。",
             "「購入入力」「購入一覧」「請求書照合」（2026年10月10日追加。管理者用URLのみ）：⑤ごみ持込量記録システムの再生資材・雑品購入と同じ考え方です。購入は貸与の記録とは別に1件ずつ入力し、請求書照合では、指定した期間の購入を業者ごとに合計して請求書の金額と比べます。請求書の金額は、期間の終わりの日の月の請求分として保存されます。購入の記録の削除にも管理者パスワードが必要です。",
-            "「古いデータの整理」は、購入の記録・請求書の金額は消しません（消すのは貸与の記録だけです）。",
-            "「古いデータの整理」は、一覧画面のいちばん上にあります（管理者用URLのみ）。指定した日付より前の記録を、現況に関係なくまとめて削除します。品目マスタとサイズの選択肢は消しません。",
+            "「古いデータの整理」は、一覧画面のいちばん上にあります（管理者用URLのみ）。指定した日付より前の記録を、チェックを付けた種類（貸与の記録・購入の記録・請求書の金額）だけまとめて削除します（2026年10月10日から種類を選べるようにしました。最初は貸与の記録だけにチェックが付いています）。貸与の記録は現況に関係なく削除し、購入の記録は購入日、請求書の金額は「何年何月分」で判断します（入力した日付の月より前の月の分を削除）。品目マスタとサイズの選択肢は消しません。",
             "集計画面はメニューから外しています（プログラムの中に部品は残っていますが、使われていません）。",
             "残っている作業：実際に配っている部署用URLを、マスターファイルに書き込む（上の「このアプリのURL」が参考になります）。",
           ]}
@@ -3013,6 +3086,18 @@ async function fetchAllPurchases(filter) {
     const rows = await sb(
       `lending_purchases?select=*${filter || ""}&order=purchase_date.desc,id.desc&limit=${PAGE}&offset=${from}`
     );
+    all.push(...(rows || []));
+    if (!rows || rows.length < PAGE) break;
+  }
+  return all;
+}
+
+// 1000件対策：1000件ずつ区切って、条件に合う請求書の金額をすべて読み込む
+async function fetchAllInvoices(filter) {
+  const all = [];
+  const PAGE = 1000;
+  for (let from = 0; ; from += PAGE) {
+    const rows = await sb(`lending_invoices?select=*${filter || ""}&order=id&limit=${PAGE}&offset=${from}`);
     all.push(...(rows || []));
     if (!rows || rows.length < PAGE) break;
   }
@@ -3551,7 +3636,7 @@ function InvoiceTab() {
     try {
       const [p, inv] = await Promise.all([
         fetchAllPurchases(`&purchase_date=gte.${from}&purchase_date=lte.${to}`),
-        sb(`lending_invoices?select=*&billing_year=eq.${year}&billing_month=eq.${month}`),
+        fetchAllInvoices(`&billing_year=eq.${year}&billing_month=eq.${month}`),
       ]);
       setPurchases(p);
       setInvoices(inv || []);
