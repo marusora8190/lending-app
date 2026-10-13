@@ -889,7 +889,7 @@ function getInitialTab() {
   try {
     const params = new URLSearchParams(window.location.search);
     const t = params.get("tab");
-    if (t && ["input", "list", "summary", "masters", "settings", "purchase_input", "purchase_list", "invoice"].includes(t)) return t;
+    if (t && ["input", "list", "summary", "masters", "settings", "purchase_input", "purchase_list", "invoice", "invoice_list"].includes(t)) return t;
   } catch (e) {}
   return "input";
 }
@@ -1069,6 +1069,7 @@ function App() {
                       ["purchase_input", "購入入力"],
                       ["purchase_list", "購入一覧"],
                       ["invoice", "請求書照合"],
+                      ["invoice_list", "請求書一覧"],
                       ["masters", "品目マスタ"],
                       ["settings", "設　定"],
                     ]),
@@ -1131,6 +1132,7 @@ function App() {
             />
           )}
           {tab === "invoice" && !lockedDept && <InvoiceTab />}
+          {tab === "invoice_list" && !lockedDept && <InvoiceListTab />}
           {tab === "settings" && !lockedDept && (
             <SettingsTab departments={departments.length ? departments : DEPT_ORDER} />
           )}
@@ -2276,7 +2278,7 @@ function CleanupSection({ onDeleted }) {
 // マスターファイルと修正依頼メモのうち、②に関係することをまとめた画面。
 // このファイルは公開されているため、個人のメールアドレス・パスワードの保管場所・
 // 共有サーバーの場所などは書かない（それらはマスターファイルを見る）。
-const SETTINGS_INFO_DATE = "2026年10月10日";
+const SETTINGS_INFO_DATE = "2026年10月13日";
 
 function SettingsLink({ href, children }) {
   return (
@@ -2571,7 +2573,7 @@ function SettingsTab({ departments }) {
           管理者用（このページ）：<SettingsLink href={baseUrl} />
         </div>
         <div style={{ ...sub, marginTop: "4px" }}>
-          URLの最後に <span style={code}>?dept=部署名</span> を付けると、その部署専用の画面になります（部署が固定され、「購入入力」「購入一覧」「請求書照合」「品目マスタ」「設定」「古いデータの整理」は出ません）。
+          URLの最後に <span style={code}>?dept=部署名</span> を付けると、その部署専用の画面になります（部署が固定され、「購入入力」「購入一覧」「請求書照合」「請求書一覧」「品目マスタ」「設定」「古いデータの整理」は出ません）。
         </div>
         <div style={h}>部署用のURL</div>
         <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
@@ -2667,7 +2669,7 @@ function SettingsTab({ departments }) {
           <span style={code}>fetchAllPurchases</span>（「購入入力」「購入一覧」「請求書照合」「古いデータの整理」の4か所で使用。2026年10月10日追加）
         </div>
         <div>
-          <span style={code}>fetchAllInvoices</span>（「請求書照合」「古いデータの整理」の2か所で使用。2026年10月10日追加）
+          <span style={code}>fetchAllInvoices</span>（「請求書照合」「請求書一覧」の一覧・古い請求書の削除、「古いデータの整理」の4か所で使用。2026年10月10日追加、10月13日に2か所追加）
         </div>
         <div style={sub}>
           データベースは1回に1000件までしか返さないため、1000件ずつ区切ってすべて読み込みます。これが消えると、1000件を超えたときに古い記録が整理しきれなくなったり、購入の一覧や請求書照合の合計が足りなくなったりします。
@@ -2733,6 +2735,7 @@ function SettingsTab({ departments }) {
           items={[
             "使っているデータの表：items（品目マスタ）・lending_records（貸与の記録）・size_options（サイズの選択肢）・lending_purchases（購入の記録）・lending_invoices（請求書の金額。業者ごと・月ごと）。",
             "「購入入力」「購入一覧」「請求書照合」（2026年10月10日追加。管理者用URLのみ）：⑤ごみ持込量記録システムの再生資材・雑品購入と同じ考え方です。購入は貸与の記録とは別に入力し（同じ日・同じ業者の品物は何点かまとめて入力できます）、請求書照合では、指定した期間の購入を業者ごとに合計して請求書の金額と比べます。請求書の金額は、期間の終わりの日の月の請求分として保存されます。購入の記録の削除にも管理者パスワードが必要です。",
+            "「請求書一覧」（2026年10月13日追加。管理者用URLのみ。「請求書照合」の下）：請求書照合で保存した請求書の金額を、何年何月分・業者ごとに一覧で見られます（年・業者で絞り込み、件数と合計を表示）。1件ずつの「削除」と、上の「🗑 古い請求書の削除」（選んだ月より前の月の分をまとめて削除）があり、どちらも管理者パスワードが必要です。",
             "「古いデータの整理」は、一覧画面のいちばん上にあります（管理者用URLのみ）。指定した日付より前の記録を、チェックを付けた種類（貸与の記録・購入の記録・請求書の金額）だけまとめて削除します（2026年10月10日から種類を選べるようにしました。最初は貸与の記録だけにチェックが付いています）。貸与の記録は現況に関係なく削除し、購入の記録は購入日、請求書の金額は「何年何月分」で判断します（入力した日付の月より前の月の分を削除）。品目マスタとサイズの選択肢は消しません。",
             "集計画面はメニューから外しています（プログラムの中に部品は残っていますが、使われていません）。",
             "残っている作業：実際に配っている部署用URLを、マスターファイルに書き込む（上の「このアプリのURL」が参考になります）。",
@@ -3967,6 +3970,318 @@ function InvoiceTab() {
       )}
       <p className="text-xs text-slate-500 mt-2" style={{ marginTop: "12px" }}>
         ※単価は税込で入力しています。請求書の消費税を合計金額でまとめて計算している場合、1円〜数円の差が出ることがあります。
+      </p>
+    </div>
+  );
+}
+/* ---------- 請求書一覧（2026年10月13日追加） ---------- */
+// 「請求書照合」で保存した請求書の金額（lending_invoices）を一覧で見る画面。
+// ・年・業者で絞り込み、件数と合計を表示する。
+// ・1件ずつの削除と、選んだ月より前の月の分をまとめて消す「古い請求書の削除」がある。
+//   どちらも削除なので管理者パスワードが必要（sb の DELETE が getAdminToken を使う）。
+// ・読み込みは1000件対策の部品 fetchAllInvoices を使う（一覧と、古い請求書の削除の2か所）。
+const invoiceMonthLabel = (r) => `${Number(r.billing_year)}年${Number(r.billing_month)}月分`;
+const thisMonthStr = () => todayStr().slice(0, 7); // 今月（日本時間、"YYYY-MM"）
+
+function formatJstDateTime(iso) {
+  if (!iso) return "";
+  const d = new Date(new Date(iso).getTime() + 9 * 60 * 60 * 1000);
+  if (isNaN(d.getTime())) return "";
+  const p = (n) => String(n).padStart(2, "0");
+  return `${d.getUTCFullYear()}/${p(d.getUTCMonth() + 1)}/${p(d.getUTCDate())} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}`;
+}
+
+function InvoiceOldCleanup({ onDeleted }) {
+  const [open, setOpen] = useState(false);
+  const [month, setMonth] = useState("");
+  const [targets, setTargets] = useState(null); // { month, ids }
+  const [result, setResult] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const changeMonth = (v) => {
+    setMonth(v);
+    setTargets(null);
+    setResult("");
+  };
+
+  const checkTargets = async () => {
+    setTargets(null);
+    setResult("");
+    if (!/^\d{4}-\d{2}$/.test(month)) {
+      setResult("年月を選んでください。");
+      return;
+    }
+    if (month > thisMonthStr()) {
+      setResult("今月より後の月は選べません。今月までの月を選んでください。");
+      return;
+    }
+    setBusy(true);
+    setResult("対象を数えています…");
+    try {
+      const ids = (await fetchAllInvoices(invoiceBeforeFilter(month + "-01"))).map((r) => r.id);
+      if (!ids.length) {
+        setResult(`${cleanupMonthLabel(month + "-01")}より前の月の請求書の金額はありません。`);
+      } else {
+        setTargets({ month, ids });
+        setResult("");
+      }
+    } catch (e) {
+      setResult("対象を数えられませんでした：" + e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const runCleanup = async () => {
+    if (!targets) return;
+    if (month !== targets.month) {
+      setTargets(null);
+      setResult("年月が変わったため、もう一度「対象を確認する」を押してください。");
+      return;
+    }
+    // 先に管理者パスワードを確認してから、最後の確認を出す
+    try {
+      await getAdminToken();
+    } catch (e) {
+      setResult(e.message);
+      return;
+    }
+    const label = cleanupMonthLabel(targets.month + "-01");
+    if (!window.confirm(`${label}より前の月の請求書の金額 ${targets.ids.length}件を削除します。元に戻せません。\n（購入の記録は消えません）\n\n本当に削除しますか？`)) return;
+    setBusy(true);
+    setResult("削除しています…（画面を閉じずにお待ちください）");
+    let deleted = 0;
+    let errorMsg = "";
+    try {
+      for (let i = 0; i < targets.ids.length; i += 100) {
+        const chunk = targets.ids.slice(i, i + 100).join(",");
+        const res = await sb(`lending_invoices?id=in.(${chunk})&select=id`, { method: "DELETE" });
+        deleted += (res || []).length;
+      }
+    } catch (e) {
+      errorMsg = e.message;
+    }
+    let m = `請求書の金額：${deleted}件を削除しました。`;
+    if (deleted < targets.ids.length) {
+      m += `（${targets.ids.length - deleted}件は削除できませんでした` + (errorMsg ? `：${errorMsg}）` : "。管理者パスワードを確認してください）");
+    }
+    setTargets(null);
+    setResult(m);
+    setBusy(false);
+    if (onDeleted) onDeleted();
+  };
+
+  return (
+    <details
+      className="border border-slate-200 rounded"
+      style={{
+        marginBottom: "12px",
+        background: "#fff",
+        borderColor: "#d97706",
+        width: open ? "auto" : "fit-content",
+        maxWidth: "100%",
+      }}
+      onToggle={(e) => setOpen(e.currentTarget.open)}
+    >
+      <summary className="px-4 py-2 font-medium" style={{ cursor: "pointer", fontSize: "15px", color: "#b45309" }}>
+        🗑 古い請求書の削除
+        <span className="text-xs text-slate-400" style={{ fontWeight: 400, marginLeft: "8px" }}>
+          {open ? "ここを押すと閉じます" : "ここを押すと開きます"}
+        </span>
+      </summary>
+      <div className="px-4 text-sm text-slate-700" style={{ paddingBottom: "16px", lineHeight: 1.7 }}>
+        <p className="mb-2">
+          選んだ月より前の月の請求書の金額を、まとめて削除します（例：2027年4月を選ぶと、3月分までが消え、4月分は残ります）。購入の記録は消えません。削除したものは元に戻せません。選べるのは今月までです。
+        </p>
+        <div className="flex items-center gap-3" style={{ flexWrap: "wrap" }}>
+          <input
+            type="month"
+            value={month}
+            max={thisMonthStr()}
+            onChange={(e) => changeMonth(e.target.value)}
+            className="border border-slate-300 rounded px-2 py-1.5 text-sm"
+          />
+          <span>より前の月の分</span>
+          <button
+            type="button"
+            onClick={checkTargets}
+            disabled={busy}
+            className="text-sm border border-slate-300 text-slate-700 rounded px-3 py-1.5"
+            style={{ opacity: busy ? 0.5 : 1 }}
+          >
+            対象を確認する
+          </button>
+        </div>
+        {targets && (
+          <div className="px-3 py-2 bg-slate-50 rounded" style={{ marginTop: "12px" }}>
+            <strong>
+              請求書の金額（{cleanupMonthLabel(targets.month + "-01")}より前の月の分）：{targets.ids.length}件
+            </strong>
+            <div>
+              <button
+                type="button"
+                onClick={runCleanup}
+                disabled={busy}
+                className="mt-2 text-sm border border-red-300 bg-red-50 text-red-700 rounded px-3 py-1.5"
+                style={{ opacity: busy ? 0.5 : 1, fontWeight: 600 }}
+              >
+                この{targets.ids.length}件を削除する
+              </button>
+            </div>
+          </div>
+        )}
+        {result && (
+          <div className="px-3 py-2 bg-slate-50 rounded" style={{ marginTop: "12px", whiteSpace: "pre-line" }}>
+            {result}
+          </div>
+        )}
+      </div>
+    </details>
+  );
+}
+
+function InvoiceListTab() {
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [yearFilter, setYearFilter] = useState("");
+  const [vendorFilter, setVendorFilter] = useState("");
+  const [deletingId, setDeletingId] = useState(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      setRows(await fetchAllInvoices(""));
+    } catch (e) {
+      setError("読み込みに失敗しました: " + e.message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const yearOptions = useMemo(
+    () => Array.from(new Set(rows.map((r) => r.billing_year).filter(Boolean))).sort((a, b) => b.localeCompare(a)),
+    [rows]
+  );
+  const vendorOptions = useMemo(() => uniqSorted(rows.map((r) => r.vendor_name)), [rows]);
+  // 新しい月が上。同じ月の中は業者名の順
+  const shown = useMemo(
+    () =>
+      rows
+        .filter((r) => (!yearFilter || r.billing_year === yearFilter) && (!vendorFilter || r.vendor_name === vendorFilter))
+        .sort(
+          (a, b) =>
+            String(b.billing_year).localeCompare(String(a.billing_year)) ||
+            String(b.billing_month).localeCompare(String(a.billing_month)) ||
+            String(a.vendor_name || "").localeCompare(String(b.vendor_name || ""), "ja")
+        ),
+    [rows, yearFilter, vendorFilter]
+  );
+  const total = shown.reduce((s, r) => s + Number(r.amount || 0), 0);
+
+  const handleDelete = async (r) => {
+    if (!window.confirm(`${invoiceMonthLabel(r)}「${r.vendor_name}」の請求書の金額（${yen(r.amount)}円）を削除します。よろしいですか？\n（購入の記録は消えません）`)) return;
+    setDeletingId(r.id);
+    setError("");
+    try {
+      const res = await sb(`lending_invoices?id=eq.${r.id}&select=id`, { method: "DELETE" });
+      if (!res || res.length === 0) throw new Error("削除できませんでした（管理者としてログインできていない可能性があります）");
+      await load();
+    } catch (e) {
+      setError("削除に失敗しました: " + e.message);
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  return (
+    <div>
+      <InvoiceOldCleanup onDeleted={load} />
+      <h2 className="text-sm font-medium text-slate-700 mb-2">請求書一覧（請求書照合で保存した金額）</h2>
+      <div style={purchaseGrid} className="mb-3">
+        <Field label="年">
+          <select value={yearFilter} onChange={(e) => setYearFilter(e.target.value)} className={purchaseInputClass}>
+            <option value="">すべての年</option>
+            {yearOptions.map((y) => (
+              <option key={y} value={y}>
+                {Number(y)}年
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="業者">
+          <select value={vendorFilter} onChange={(e) => setVendorFilter(e.target.value)} className={purchaseInputClass}>
+            <option value="">すべての業者</option>
+            {vendorOptions.map((v) => (
+              <option key={v} value={v}>
+                {v}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <button
+          type="button"
+          onClick={() => {
+            setYearFilter("");
+            setVendorFilter("");
+          }}
+          className={purchaseBtn}
+        >
+          絞り込みを解除
+        </button>
+      </div>
+
+      {error && <p className="text-sm text-red-600 mb-3">{error}</p>}
+
+      <div className="mb-2 text-sm text-slate-700">
+        {loading ? "読み込み中..." : `${shown.length}件 ／ 請求書金額の合計 ${yen(total)} 円`}
+      </div>
+
+      <div className="border border-slate-200 rounded overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="bg-slate-100 text-slate-600">
+            <tr>
+              <th className="px-2 py-2 text-left">何年何月分</th>
+              <th className="px-2 py-2 text-left">業者</th>
+              <th className="px-2 py-2 text-right">請求書金額</th>
+              <th className="px-2 py-2 text-left">最後に保存した日時</th>
+              <th className="px-2 py-2"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {!loading && shown.length === 0 && (
+              <tr>
+                <td colSpan={5} className="px-2 py-2 text-slate-500">保存した請求書の金額がありません</td>
+              </tr>
+            )}
+            {shown.map((r) => (
+              <tr key={r.id} className="border-t border-slate-100">
+                <td className="px-2 py-1.5" style={{ whiteSpace: "nowrap" }}>{invoiceMonthLabel(r)}</td>
+                <td className="px-2 py-1.5">{r.vendor_name}</td>
+                <td className="px-2 py-1.5 text-right">{yen(r.amount)}円</td>
+                <td className="px-2 py-1.5" style={{ whiteSpace: "nowrap" }}>{formatJstDateTime(r.updated_at || r.created_at)}</td>
+                <td className="px-2 py-1.5 text-center" style={{ whiteSpace: "nowrap" }}>
+                  <button
+                    type="button"
+                    onClick={() => handleDelete(r)}
+                    disabled={deletingId === r.id}
+                    className="text-slate-400 hover:text-red-600 text-xs border border-slate-200 rounded px-2 py-1"
+                  >
+                    {deletingId === r.id ? "削除中" : "削除"}
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="text-xs text-slate-500" style={{ marginTop: "12px" }}>
+        ※金額を直すときは「請求書照合」で、その月の集計期間を選んで入れ直してください。
       </p>
     </div>
   );
