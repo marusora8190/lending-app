@@ -680,10 +680,10 @@ function askAdminPassword(message){
     setTimeout(function(){ input.focus(); }, 0);
   });
 }
-async function getAdminToken(){
+async function getAdminToken(firstMessage){
   const cached = adminCachedToken();
   if(cached) return cached;
-  let message = '削除するには管理者パスワードを入力してください。';
+  let message = firstMessage || '削除するには管理者パスワードを入力してください。';
   for(;;){
     const pw = await askAdminPassword(message);
     if(pw === null || pw === '') throw new Error('管理者パスワードが入力されなかったため、削除しませんでした。');
@@ -885,6 +885,10 @@ function toWareki(dateStr) {
   return `${era}${eraLabel}.${m}.${d}`;
 }
 
+// 管理者パスワードを入れたときだけ表示する画面（2026年10月13日〜）
+const ADMIN_TABS = ["purchase_input", "purchase_list", "invoice", "invoice_list", "masters", "settings"];
+const ADMIN_MENU_KEY = "lendingAdminMenuOpen";
+
 function getInitialTab() {
   try {
     const params = new URLSearchParams(window.location.search);
@@ -944,6 +948,47 @@ function App() {
       return "";
     }
   }, []);
+
+  // 管理者用のメニュー（購入入力・購入一覧・請求書照合・請求書一覧・品目マスタ・設定）は、
+  // 管理者パスワードを入れたときだけ表示する（2026年10月13日〜）。
+  // 一度入れると、このタブを閉じるまで（または「管理者メニューを閉じる」を押すまで）表示したまま。
+  // ※画面の表示を分けるだけで、データベースの守り方（削除だけ管理者）は変わらない。
+  const [adminUnlocked, setAdminUnlocked] = useState(() => {
+    try {
+      return sessionStorage.getItem(ADMIN_MENU_KEY) === "1";
+    } catch (e) {
+      return false;
+    }
+  });
+  const showAdmin = !lockedDept && adminUnlocked;
+  const [unlocking, setUnlocking] = useState(false);
+
+  const unlockAdminMenu = async () => {
+    if (unlocking) return;
+    setUnlocking(true);
+    try {
+      await getAdminToken("管理者用のメニューを表示するには、管理者パスワードを入力してください。");
+      try {
+        sessionStorage.setItem(ADMIN_MENU_KEY, "1");
+      } catch (e) {}
+      setAdminUnlocked(true);
+    } catch (e) {
+      // 「やめる」を押したときは何もしない。接続の失敗だけ知らせる
+      if (!/入力されなかった/.test(e.message)) window.alert(e.message);
+    } finally {
+      setUnlocking(false);
+    }
+  };
+
+  const lockAdminMenu = () => {
+    // 管理者としてのログインも外す（次に開くときや削除のときは、もう一度パスワードを聞く）
+    try {
+      sessionStorage.removeItem(ADMIN_MENU_KEY);
+      sessionStorage.removeItem(ADMIN_SESSION_KEY);
+    } catch (e) {}
+    setAdminUnlocked(false);
+    if (ADMIN_TABS.includes(tab)) setTab("input");
+  };
 
   const loadItems = useCallback(async () => {
     const i = await sb("items?select=id,item_code,item_name,category,item_type,department_scope,unit_price_excl_tax,unit_price_incl_tax&order=sort_order");
@@ -1063,7 +1108,7 @@ function App() {
               {[
                 ["input", "入　力"],
                 ["list", "一　覧"],
-                ...(lockedDept
+                ...(!showAdmin
                   ? []
                   : [
                       ["purchase_input", "購入入力"],
@@ -1082,6 +1127,16 @@ function App() {
                   {label}
                 </button>
               ))}
+              {!lockedDept && !adminUnlocked && (
+                <button onClick={unlockAdminMenu} disabled={unlocking} className="sidebar-btn" title="管理者パスワードを入れると、管理者用のメニューが出ます">
+                  🔑 管理者メニュー
+                </button>
+              )}
+              {showAdmin && (
+                <button onClick={lockAdminMenu} className="sidebar-btn" style={{ fontSize: "12px" }} title="管理者用のメニューを隠します">
+                  🔒 管理者メニューを閉じる
+                </button>
+              )}
               <button onClick={handleLogout} className="sidebar-btn logout-btn">
                 ログアウト
               </button>
@@ -1114,7 +1169,7 @@ function App() {
               lockedDept={lockedDept}
             />
           )}
-          {tab === "purchase_input" && !lockedDept && (
+          {tab === "purchase_input" && showAdmin && (
             <PurchaseInputTab
               items={items}
               itemByName={itemByName}
@@ -1123,7 +1178,7 @@ function App() {
               onEditDone={() => setPurchaseEditing(null)}
             />
           )}
-          {tab === "purchase_list" && !lockedDept && (
+          {tab === "purchase_list" && showAdmin && (
             <PurchaseListTab
               onEdit={(r) => {
                 setPurchaseEditing(r);
@@ -1131,12 +1186,22 @@ function App() {
               }}
             />
           )}
-          {tab === "invoice" && !lockedDept && <InvoiceTab />}
-          {tab === "invoice_list" && !lockedDept && <InvoiceListTab />}
-          {tab === "settings" && !lockedDept && (
+          {ADMIN_TABS.includes(tab) && !showAdmin && (
+            <div className="border border-slate-200 rounded px-4 py-3 text-sm text-slate-700" style={{ background: "#fff" }}>
+              <p className="mb-2">この画面は管理者用です。</p>
+              {!lockedDept && (
+                <button type="button" onClick={unlockAdminMenu} disabled={unlocking} className="text-sm border border-slate-300 text-slate-700 rounded px-3 py-1.5">
+                  🔑 管理者パスワードを入れて開く
+                </button>
+              )}
+            </div>
+          )}
+          {tab === "invoice" && showAdmin && <InvoiceTab />}
+          {tab === "invoice_list" && showAdmin && <InvoiceListTab />}
+          {tab === "settings" && showAdmin && (
             <SettingsTab departments={departments.length ? departments : DEPT_ORDER} />
           )}
-          {tab === "masters" && !lockedDept && (
+          {tab === "masters" && showAdmin && (
             <MastersTab
               items={items}
               onChanged={loadItems}
@@ -2573,7 +2638,7 @@ function SettingsTab({ departments }) {
           管理者用（このページ）：<SettingsLink href={baseUrl} />
         </div>
         <div style={{ ...sub, marginTop: "4px" }}>
-          URLの最後に <span style={code}>?dept=部署名</span> を付けると、その部署専用の画面になります（部署が固定され、「購入入力」「購入一覧」「請求書照合」「請求書一覧」「品目マスタ」「設定」「古いデータの整理」は出ません）。
+          URLの最後に <span style={code}>?dept=部署名</span> を付けると、その部署専用の画面になります（部署が固定され、「購入入力」「購入一覧」「請求書照合」「請求書一覧」「品目マスタ」「設定」「古いデータの整理」は出ません）。部署を付けないこのURLでも、「購入入力」「購入一覧」「請求書照合」「請求書一覧」「品目マスタ」「設定」は、左のメニューの「🔑 管理者メニュー」で管理者パスワードを入れたときだけ出ます（2026年10月13日〜。一度入れると、タブを閉じるか「🔒 管理者メニューを閉じる」を押すまで出たまま）。
         </div>
         <div style={h}>部署用のURL</div>
         <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
@@ -2736,6 +2801,7 @@ function SettingsTab({ departments }) {
             "使っているデータの表：items（品目マスタ）・lending_records（貸与の記録）・size_options（サイズの選択肢）・lending_purchases（購入の記録）・lending_invoices（請求書の金額。業者ごと・月ごと）。",
             "「購入入力」「購入一覧」「請求書照合」（2026年10月10日追加。管理者用URLのみ）：⑤ごみ持込量記録システムの再生資材・雑品購入と同じ考え方です。購入は貸与の記録とは別に入力し（同じ日・同じ業者の品物は何点かまとめて入力できます）、請求書照合では、指定した期間の購入を業者ごとに合計して請求書の金額と比べます。請求書の金額は、期間の終わりの日の月の請求分として保存されます。購入の記録の削除にも管理者パスワードが必要です。",
             "「請求書一覧」（2026年10月13日追加。管理者用URLのみ。「請求書照合」の下）：請求書照合で保存した請求書の金額を、何年何月分・業者ごとに一覧で見られます（年・業者で絞り込み、件数と合計を表示）。1件ずつの「削除」と、上の「🗑 古い請求書の削除」（選んだ月より前の月の分をまとめて削除）があり、どちらも管理者パスワードが必要です。",
+            "管理者用のメニュー（購入入力・購入一覧・請求書照合・請求書一覧・品目マスタ・設定）は、部署を付けないURLでも、左のメニューの「🔑 管理者メニュー」で管理者パスワード（削除のときと同じもの）を入れたときだけ表示されます（2026年10月13日〜）。画面の表示を分けるだけで、データベースの守り方は変わりません。",
             "「古いデータの整理」は、一覧画面のいちばん上にあります（管理者用URLのみ）。指定した日付より前の記録を、チェックを付けた種類（貸与の記録・購入の記録・請求書の金額）だけまとめて削除します（2026年10月10日から種類を選べるようにしました。最初は貸与の記録だけにチェックが付いています）。貸与の記録は現況に関係なく削除し、購入の記録は購入日、請求書の金額は「何年何月分」で判断します（入力した日付の月より前の月の分を削除）。品目マスタとサイズの選択肢は消しません。",
             "集計画面はメニューから外しています（プログラムの中に部品は残っていますが、使われていません）。",
             "残っている作業：実際に配っている部署用URLを、マスターファイルに書き込む（上の「このアプリのURL」が参考になります）。",
