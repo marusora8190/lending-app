@@ -1874,18 +1874,19 @@ function ListTab({ departments, items, itemByName, sizesByCategory, lockedDept }
       {loading ? (
         <p className="text-sm text-slate-500">読み込み中...</p>
       ) : (
-        <div className="overflow-x-auto border border-slate-200 rounded">
+        <div className="overflow-x-auto border border-slate-200 rounded" style={{ maxHeight: "75vh", overflowY: "auto" }}>
           <table className="w-full text-sm">
-            <thead className="bg-slate-100 text-slate-600">
+            {/* 見出し（日付〜現況）は列の真ん中に置き、下へずらしても上に固定して表示（2026年10月14日〜） */}
+            <thead className="bg-slate-100 text-slate-600" style={{ position: "sticky", top: 0, zIndex: 2 }}>
               <tr>
-                <th className="px-2 py-2 text-left w-16">日付</th>
-                <th className="px-2 py-2 text-left">部署</th>
-                <th className="px-2 py-2 text-left">氏名</th>
-                <th className="px-2 py-2 text-left">品名</th>
-                <th className="px-2 py-2 text-left">サイズ</th>
-                <th className="px-2 py-2 text-right">数量</th>
-                <th className="px-2 py-2 text-right">単価</th>
-                <th className="px-2 py-2 text-left w-32">現況</th>
+                <th className="px-2 py-2 text-center w-16">日付</th>
+                <th className="px-2 py-2 text-center">部署</th>
+                <th className="px-2 py-2 text-center">氏名</th>
+                <th className="px-2 py-2 text-center">品名</th>
+                <th className="px-2 py-2 text-center">サイズ</th>
+                <th className="px-2 py-2 text-center">数量</th>
+                <th className="px-2 py-2 text-center">単価</th>
+                <th className="px-2 py-2 text-center w-32">現況</th>
                 <th className="px-2 py-2 w-28"></th>
               </tr>
             </thead>
