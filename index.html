@@ -1239,8 +1239,6 @@ function InputTab({ departments, items, itemByName, sizesByCategory, lockedDept 
     date: todayStr(),
     department: lockedDept || "",
     team: "",
-    applicant: "",
-    inputter: "",
   });
   const [rows, setRows] = useState([emptyRow(), emptyRow(), emptyRow()]);
   const [saving, setSaving] = useState(false);
@@ -1248,8 +1246,6 @@ function InputTab({ departments, items, itemByName, sizesByCategory, lockedDept 
   const [recentItems, setRecentItems] = useState(() => loadRecentItems());
   const [simpleMode, setSimpleMode] = useState(isLocked);
   const [teamHistory, setTeamHistory] = useState(() => loadHistory(TEAM_HISTORY_KEY));
-  const [applicantHistory, setApplicantHistory] = useState(() => loadHistory(APPLICANT_HISTORY_KEY));
-  const [inputterHistory, setInputterHistory] = useState(() => loadHistory(INPUTTER_HISTORY_KEY));
   const deptFilteredItems = useMemo(
     () => items.filter((it) => deptScopeIncludes(it.department_scope, common.department)),
     [items, common.department]
@@ -1303,16 +1299,12 @@ function InputTab({ departments, items, itemByName, sizesByCategory, lockedDept 
         size: r.size || null,
         quantity: Number(r.quantity) || 1,
         unit_price: r.unitPrice === "" ? null : Number(r.unitPrice),
-        applicant: common.applicant || null,
-        inputter: common.inputter || null,
         status: r.status || null,
         note: r.note || null,
       }));
       await sb("lending_records", { method: "POST", body: payload });
       setMessage({ type: "success", text: `${validRows.length}件を登録しました。` });
       if (common.team) setTeamHistory(saveHistoryItem(TEAM_HISTORY_KEY, common.team));
-      if (common.applicant) setApplicantHistory(saveHistoryItem(APPLICANT_HISTORY_KEY, common.applicant));
-      if (common.inputter) setInputterHistory(saveHistoryItem(INPUTTER_HISTORY_KEY, common.inputter));
       // 「引継」がオンの行は氏名・分類（品種分類）・品名を次の入力用に引き継ぎ、
       // サイズ・数量・備考はリセットする（単価は品名に応じて再計算される）。
       // 「引継」がオフの行は完全に空の行に戻す。
@@ -1381,56 +1373,14 @@ function InputTab({ departments, items, itemByName, sizesByCategory, lockedDept 
             ))}
           </datalist>
         </Field>
-        <Field label="申込者">
-          <input
-            value={common.applicant}
-            onChange={(e) => setCommon({ ...common, applicant: e.target.value })}
-            list="applicant-history"
-            className="w-full border border-slate-300 rounded px-2 py-1.5 text-sm"
-          />
-          <datalist id="applicant-history">
-            {applicantHistory.map((a) => (
-              <option key={a} value={a} />
-            ))}
-          </datalist>
-        </Field>
-        <Field label="入力者">
-          <input
-            value={common.inputter}
-            onChange={(e) => setCommon({ ...common, inputter: e.target.value })}
-            list="inputter-history"
-            className="w-full border border-slate-300 rounded px-2 py-1.5 text-sm"
-          />
-          <datalist id="inputter-history">
-            {inputterHistory.map((i) => (
-              <option key={i} value={i} />
-            ))}
-          </datalist>
-        </Field>
       </div>
-
-      {isLocked && (
-        <div className="mb-3">
-          <button
-            onClick={() => setSimpleMode((v) => !v)}
-            className={
-              "border rounded px-3 py-1.5 text-sm font-medium " +
-              (simpleMode
-                ? "bg-amber-100 border-amber-400 text-amber-800"
-                : "border-slate-300 text-slate-600 hover:bg-slate-50")
-            }
-          >
-            📱 {simpleMode ? "スマホ表示：ON（かんたん入力）" : "スマホ表示：OFF（すべての項目を表示）"}
-          </button>
-        </div>
-      )}
 
       <div className="overflow-x-auto border border-slate-200 rounded mb-3">
         <table className="w-full text-sm">
           <thead className="bg-slate-100 text-slate-600">
             <tr>
               {!simpleMode && <th className="px-2 py-2 text-left w-16">学生</th>}
-              {!simpleMode && <th className="px-2 py-2 text-left w-28">氏名</th>}
+              <th className="px-2 py-2 text-left w-28">氏名</th>
               <th className="px-2 py-2 text-left w-28">分類</th>
               <th className="px-2 py-2 text-left w-48">品名</th>
               <th className="px-2 py-2 text-left w-24">サイズ</th>
@@ -1461,15 +1411,13 @@ function InputTab({ departments, items, itemByName, sizesByCategory, lockedDept 
                       />
                     </td>
                   )}
-                  {!simpleMode && (
-                    <td className="px-2 py-1">
-                      <input
-                        value={r.personName}
-                        onChange={(e) => updateRow(r.key, { personName: e.target.value })}
-                        className="w-full border border-slate-200 rounded px-1.5 py-1 text-sm"
-                      />
-                    </td>
-                  )}
+                  <td className="px-2 py-1">
+                    <input
+                      value={r.personName}
+                      onChange={(e) => updateRow(r.key, { personName: e.target.value })}
+                      className="w-full border border-slate-200 rounded px-1.5 py-1 text-sm"
+                    />
+                  </td>
                   <td className="px-2 py-1">
                     <select
                       value={r.itemType}
@@ -2362,7 +2310,7 @@ function CleanupSection({ onDeleted }) {
 // マスターファイルと修正依頼メモのうち、②に関係することをまとめた画面。
 // このファイルは公開されているため、個人のメールアドレス・パスワードの保管場所・
 // 共有サーバーの場所などは書かない（それらはマスターファイルを見る）。
-const SETTINGS_INFO_DATE = "2026年10月23日";
+const SETTINGS_INFO_DATE = "2026年10月24日";
 
 function SettingsLink({ href, children }) {
   return (
@@ -2825,6 +2773,7 @@ function SettingsTab({ departments }) {
             "管理者用のメニュー（購入入力・購入一覧・請求書照合・請求書一覧・品目マスタ・設定）は、部署を付けないURLでも、左のメニューの「🔑 管理者メニュー」で管理者パスワード（削除のときと同じもの）を入れたときだけ表示されます（2026年10月13日〜）。画面の表示を分けるだけで、データベースの守り方は変わりません。",
             "「古いデータの整理」は、この「設定」画面のいちばん上にあります（2026年10月23日に「一覧」画面から移しました。管理者メニューを開いたときだけ出ます）。指定した日付より前の記録を、チェックを付けた種類（貸与の記録・購入の記録・請求書の金額）だけまとめて削除します（2026年10月10日から種類を選べるようにしました。最初は貸与の記録だけにチェックが付いています）。貸与の記録は現況に関係なく削除し、購入の記録は購入日、請求書の金額は「何年何月分」で判断します（入力した日付の月より前の月の分を削除）。品目マスタとサイズの選択肢は消しません。",
             "「一覧」の表の見出し（日付・部署・氏名・品名・サイズ・数量・単価・現況）は、列の真ん中に置いています。表は画面の高さの4分の3ほどの枠の中で上下に動き、下へずらしても見出しの行が上に残って見えます（2026年10月14日〜）。表の中の文字の並び（左寄せ、数量・単価は右寄せ）は今までどおりです。",
+            "「入力」画面（2026年10月24日〜）：部署用URLでは、表の欄は「氏名」「分類」「品名」「サイズ」「数量」だけです（それまでの「スマホ表示」の切り替えボタンはなくしました）。管理者用URLでは今までどおり、学生・単価・備考・引継の欄も出ます。どちらも、上の「申込者」「入力者」の欄はなくしました（それまでに入力された申込者・入力者のデータは消していません）。",
             "集計画面はメニューから外しています（プログラムの中に部品は残っていますが、使われていません）。",
             "残っている作業：実際に配っている部署用URLを、マスターファイルに書き込む（上の「このアプリのURL」が参考になります）。",
           ]}
