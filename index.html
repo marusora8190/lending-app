@@ -122,7 +122,27 @@ input, select {
   text-decoration-color: #b45309;
 }
 
+/* 入力画面の上の欄（日付・部署）：スマホで日付の枠が横の欄へはみ出さないようにする */
+.input-head-grid > div {
+  min-width: 0;
+}
+.input-head-grid input[type="date"] {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+  -webkit-appearance: none;
+  appearance: none;
+  min-height: 34px;
+  background: #fff;
+}
+.input-head-grid input[type="date"]::-webkit-date-and-time-value {
+  text-align: left;
+}
+
 .locked-dept {
+  box-sizing: border-box;
   width: 100%;
   border: 1px solid #e2e8f0;
   color: #334155;
@@ -1338,7 +1358,7 @@ function InputTab({ departments, items, itemByName, sizesByCategory, lockedDept 
 
   return (
     <div>
-      <div className="mb-4 grid grid-cols-2 sm:grid-cols-5 gap-3">
+      <div className="mb-4 grid grid-cols-2 sm:grid-cols-5 gap-3 input-head-grid">
         <Field label="日付">
           <input
             type="date"
