@@ -1481,6 +1481,9 @@ function InputTab({ departments, items, itemByName, sizesByCategory, lockedDept 
   const [rows, setRows] = useState([emptyRow(), emptyRow(), emptyRow()]);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState(null);
+  // 氏名は必須（2026年10月25日〜）。申し込もうとして氏名が空の件があったら、その欄を赤くする
+  const [nameErr, setNameErr] = useState(false);
+  const needName = (r) => nameErr && r.itemName.trim() && !r.personName.trim();
   const [recentItems, setRecentItems] = useState(() => loadRecentItems());
   const [simpleMode, setSimpleMode] = useState(isLocked);
   const [teamHistory, setTeamHistory] = useState(() => loadHistory(TEAM_HISTORY_KEY));
@@ -1626,6 +1629,18 @@ function InputTab({ departments, items, itemByName, sizesByCategory, lockedDept 
       setMessage({ type: "error", text: "品名が入っている行がありません。" });
       return;
     }
+    const noNameNos = rows
+      .map((r, i) => (r.itemName.trim() && !r.personName.trim() ? i + 1 : 0))
+      .filter((n) => n > 0);
+    if (noNameNos.length > 0) {
+      setNameErr(true);
+      setMessage({
+        type: "error",
+        text: `氏名は必ず入れてください（${noNameNos.map((n) => n + "件目").join("・")}に氏名がありません）。`,
+      });
+      return;
+    }
+    setNameErr(false);
     setSaving(true);
     setMessage(null);
     try {
@@ -1634,7 +1649,7 @@ function InputTab({ departments, items, itemByName, sizesByCategory, lockedDept 
         department: common.department,
         team: r.team ? r.team.trim() || null : null,
         is_student: r.isStudent,
-        person_name: r.personName || null,
+        person_name: r.personName.trim(),
         item_name: r.itemName,
         item_id: itemByName[r.itemName]?.id || null,
         size: r.size || null,
@@ -1767,8 +1782,14 @@ function InputTab({ departments, items, itemByName, sizesByCategory, lockedDept 
                 {idx > 0 && copyOpenKey === r.key && renderCopyPanel(r, idx)}
                 <div className="sp-card-grid">
                   <div>
-                    <label>氏名</label>
-                    <input value={r.personName} onChange={(e) => updateRow(r.key, { personName: e.target.value })} />
+                    <label>
+                      氏名<span style={{ color: "#dc2626", marginLeft: "4px" }}>※必須</span>
+                    </label>
+                    <input
+                      value={r.personName}
+                      onChange={(e) => updateRow(r.key, { personName: e.target.value })}
+                      style={needName(r) ? { borderColor: "#dc2626", background: "#fef2f2" } : undefined}
+                    />
                   </div>
                   <div>
                     <label>班　係</label>
@@ -1832,7 +1853,9 @@ function InputTab({ departments, items, itemByName, sizesByCategory, lockedDept 
           <thead className="bg-slate-100 text-slate-600">
             <tr>
               {!simpleMode && <th className="px-2 py-2 text-center w-16">学生</th>}
-              <th className="px-2 py-2 text-center w-28">氏名</th>
+              <th className="px-2 py-2 text-center w-28">
+                氏名<span style={{ color: "#dc2626", fontSize: "11px", marginLeft: "2px" }}>※必須</span>
+              </th>
               <th className="px-2 py-2 text-center w-24">班　係</th>
               <th className="px-2 py-2 text-center w-28">分類</th>
               <th className="px-2 py-2 text-center w-48">品名</th>
@@ -1870,6 +1893,7 @@ function InputTab({ departments, items, itemByName, sizesByCategory, lockedDept 
                       value={r.personName}
                       onChange={(e) => updateRow(r.key, { personName: e.target.value })}
                       className="w-full border border-slate-200 rounded px-1.5 py-1 text-sm"
+                      style={needName(r) ? { borderColor: "#dc2626", background: "#fef2f2" } : undefined}
                     />
                   </td>
                   <td className="px-2 py-1">
@@ -2004,9 +2028,10 @@ function InputTab({ departments, items, itemByName, sizesByCategory, lockedDept 
       </div>
       )}
 
-      <div className="flex items-center gap-3 mb-4">
+      <div className="flex items-center gap-3 mb-4" style={{ flexWrap: "wrap" }}>
         <button
           onClick={addRow}
+          style={{ whiteSpace: "nowrap" }}
           className="border border-slate-300 rounded px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
         >
           + 行を追加
@@ -2014,6 +2039,7 @@ function InputTab({ departments, items, itemByName, sizesByCategory, lockedDept 
         <button
           onClick={handleSubmit}
           disabled={!canSubmit || saving}
+          style={{ whiteSpace: "nowrap" }}
           className="bg-red-50 border-2 border-red-600 text-red-800 rounded px-4 py-1.5 text-sm font-bold hover:bg-red-100 disabled:bg-slate-100 disabled:border-slate-300 disabled:text-slate-500"
         >
           {saving ? "登録中..." : "この内容で申込む"}
@@ -3432,7 +3458,7 @@ function SettingsTab({ departments }) {
             "管理者用のメニュー（購入入力・購入一覧・請求書照合・請求書一覧・品目マスタ・設定）は、部署を付けないURLでも、左のメニューの「🔑 管理者メニュー」で管理者パスワード（削除のときと同じもの）を入れたときだけ表示されます（2026年10月13日〜）。画面の表示を分けるだけで、データベースの守り方は変わりません。",
             "「古いデータの整理」は、この「設定」画面のいちばん上にあります（2026年10月23日に「一覧」画面から移しました。管理者メニューを開いたときだけ出ます）。指定した日付より前の記録を、チェックを付けた種類（貸与の記録・購入の記録・請求書の金額）だけまとめて削除します（2026年10月10日から種類を選べるようにしました。最初は貸与の記録だけにチェックが付いています）。貸与の記録は現況に関係なく削除し、購入の記録は購入日、請求書の金額は「何年何月分」で判断します（入力した日付の月より前の月の分を削除）。品目マスタとサイズの選択肢は消しません。",
             "「一覧」の表の見出し（日付・部署・氏名・品名・サイズ・数量・単価・現況）は、列の真ん中に置いています。表は画面の高さの4分の3ほどの枠の中で上下に動き、下へずらしても見出しの行が上に残って見えます（2026年10月14日〜）。表の中の文字の並び（左寄せ、数量・単価は右寄せ）は今までどおりです。",
-            "「入力」画面（2026年10月24日〜）：部署用URLでは、表の上の「📱 スマホ」「💻 パソコン」の2つのボタンで表示を切り替えます（選んでいる方が色付き。開いたときは「スマホ」。それまでは「スマホ表示：ON／OFF」の1つのボタンでした）。「スマホ」のときは、表ではなく1件ずつのカード（「1件目」「2件目」…）に、「氏名」「班　係」「分類」「品名」「サイズ」「数量」を何行かに分けて並べます（氏名と班係、サイズと数量は横に2つ。分類・品名は1行ずつ。カードの右上に「削除」。2026年10月24日〜）。2件目からの件には「📋 ほかの件から写す」（パソコン・管理者用URLは表の右の「写す」。1件目には出ない）があり、押すと「どの件から写しますか」（自分より前の件のボタン。2件目では1件目だけ、3件目では1件目・2件目…。最初は1件目）と、氏名・班係・分類・品名・サイズ・数量のチェックが出て、選んだ件から選んだ項目だけを写せます（品名を写すときは分類も一緒に写す。写したあとは自由に直せる。チェックの選び方は次に開いたときも残る。2026年10月25日〜。10月24日に付けた「同上」のチェックは、利用者の希望で10月25日になくしました）。「パソコン」にすると、管理者用URLと同じく学生・単価・備考・引継の欄も出ます。表の見出しは欄の真ん中に置いています。どちらも、上の「申込者」「入力者」の欄はなくし、「班　係」は上の欄から表の中（氏名と分類の間。1行ごとに入力）へ移しました（それまでに入力された申込者・入力者のデータは消していません）。",
+            "「入力」画面（2026年10月24日〜）：部署用URLでは、表の上の「📱 スマホ」「💻 パソコン」の2つのボタンで表示を切り替えます（選んでいる方が色付き。開いたときは「スマホ」。それまでは「スマホ表示：ON／OFF」の1つのボタンでした）。「スマホ」のときは、表ではなく1件ずつのカード（「1件目」「2件目」…）に、「氏名」「班　係」「分類」「品名」「サイズ」「数量」を何行かに分けて並べます（氏名と班係、サイズと数量は横に2つ。分類・品名は1行ずつ。カードの右上に「削除」。2026年10月24日〜）。2件目からの件には「📋 ほかの件から写す」（パソコン・管理者用URLは表の右の「写す」。1件目には出ない）があり、押すと「どの件から写しますか」（自分より前の件のボタン。2件目では1件目だけ、3件目では1件目・2件目…。最初は1件目）と、氏名・班係・分類・品名・サイズ・数量のチェックが出て、選んだ件から選んだ項目だけを写せます（品名を写すときは分類も一緒に写す。写したあとは自由に直せる。チェックの選び方は次に開いたときも残る。2026年10月25日〜。10月24日に付けた「同上」のチェックは、利用者の希望で10月25日になくしました）。氏名は必須です（2026年10月25日〜。品名を入れた件に氏名が無いと申し込めず、「○件目に氏名がありません」と出て、その氏名の欄が赤くなります。見出しに赤い字で「※必須」）。「パソコン」にすると、管理者用URLと同じく学生・単価・備考・引継の欄も出ます。表の見出しは欄の真ん中に置いています。どちらも、上の「申込者」「入力者」の欄はなくし、「班　係」は上の欄から表の中（氏名と分類の間。1行ごとに入力）へ移しました（それまでに入力された申込者・入力者のデータは消していません）。",
             "「一覧」画面（2026年10月25日〜）：部署用URLでは、入力画面と同じ「📱 スマホ」「💻 パソコン」の2つのボタンがあります（開いたときは「スマホ」）。「スマホ」のときは、1件ずつのカードで、日付・現況（右上）、品名、氏名・班係、サイズ・数量・単価、「編集」「削除」を何行かに分けて並べます（品名・氏名の文字は、班係・サイズ・単価と同じ大きさ）。申込済は黄色、発注済は青の枠と色です。上の絞り込みの欄は2列に並べます。「編集」を押すと、そのカードが入力の欄に変わります。「パソコン」と管理者用URLは今までどおりの表です。",
             "集計画面はメニューから外しています（プログラムの中に部品は残っていますが、使われていません）。",
             "残っている作業：実際に配っている部署用URLを、マスターファイルに書き込む（上の「このアプリのURL」が参考になります）。",
