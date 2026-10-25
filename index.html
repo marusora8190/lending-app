@@ -335,6 +335,72 @@ input, select {
 .row-applied:hover { background: #fcd34d; }
 .row-ordered { background: #bfdbfe; }
 .row-ordered:hover { background: #93c5fd; }
+/* 一覧の「📱 スマホ」表示：1件ずつのカード（2026年10月25日〜） */
+.ls-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #fff;
+  padding: 10px 12px;
+}
+.ls-card.row-applied { border-color: #f59e0b; background: #fef3c7; }
+.ls-card.row-ordered { border-color: #3b82f6; background: #dbeafe; }
+.ls-card.row-applied:hover { background: #fde68a; }
+.ls-card.row-ordered:hover { background: #bfdbfe; }
+.ls-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+  color: #475569;
+  margin-bottom: 4px;
+}
+.ls-status {
+  font-size: 12px;
+  font-weight: 700;
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  padding: 1px 10px;
+  background: #fff;
+  color: #334155;
+  white-space: nowrap;
+}
+.ls-item {
+  font-size: 17px;
+  font-weight: 700;
+  color: #0f172a;
+  line-height: 1.4;
+}
+.ls-line {
+  font-size: 14px;
+  color: #334155;
+  margin-top: 2px;
+}
+.ls-line .ls-key {
+  color: #64748b;
+  font-size: 12px;
+  margin-right: 4px;
+}
+.ls-btns {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+.ls-btns button {
+  font-size: 13px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 4px 14px;
+  background: #fff;
+  color: #475569;
+}
+.ls-btns button.ls-save {
+  border-color: #f59e0b;
+  color: #b45309;
+  font-weight: 700;
+}
+
 .legend-item {
   display: inline-flex;
   align-items: center;
@@ -1845,6 +1911,8 @@ function ListTab({ departments, items, itemByName, sizesByCategory, lockedDept }
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [filters, setFilters] = useState({ department: lockedDept || "", item: "", person: "", from: "", to: "", status: "" });
+  // 部署用URLでは「📱 スマホ」「💻 パソコン」で表示を切り替える（開いたときは「スマホ」。2026年10月25日〜）
+  const [simpleMode, setSimpleMode] = useState(isLocked);
   const [editingId, setEditingId] = useState(null);
   const [editValues, setEditValues] = useState({});
   const [savingEdit, setSavingEdit] = useState(false);
@@ -1982,7 +2050,32 @@ function ListTab({ departments, items, itemByName, sizesByCategory, lockedDept }
 
   return (
     <div>
-      <div className="mb-3 grid grid-cols-4 sm:grid-cols-6 gap-3">
+      {isLocked && (
+        <div className="mb-3 flex gap-2">
+          {[
+            { on: true, label: "📱 スマホ", title: "1件ずつ、何行かに分けて表示します" },
+            { on: false, label: "💻 パソコン", title: "1件を横1行の表で表示します" },
+          ].map((b) => (
+            <button
+              key={b.label}
+              type="button"
+              onClick={() => setSimpleMode(b.on)}
+              title={b.title}
+              aria-pressed={simpleMode === b.on}
+              className={
+                "border rounded px-3 py-1.5 text-sm font-medium " +
+                (simpleMode === b.on
+                  ? "bg-amber-100 border-amber-400 text-amber-800"
+                  : "border-slate-300 text-slate-600 hover:bg-slate-50")
+              }
+            >
+              {b.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div className={"mb-3 grid gap-3 input-head-grid " + (simpleMode ? "grid-cols-2" : "grid-cols-4 sm:grid-cols-6")}>
         <Field label="部署">
           {isLocked ? (
             <div className="locked-dept">{lockedDept}</div>
@@ -2096,6 +2189,157 @@ function ListTab({ departments, items, itemByName, sizesByCategory, lockedDept }
       </div>
       {loading ? (
         <p className="text-sm text-slate-500">読み込み中...</p>
+      ) : simpleMode ? (
+        <div className="sp-cards">
+          {sortedRows.length === 0 && (
+            <p className="text-sm text-slate-400" style={{ textAlign: "center", padding: "24px 0" }}>
+              該当するデータがありません
+            </p>
+          )}
+          {sortedRows.map((r) =>
+            editingId === r.id ? (
+              <div key={r.id} className="sp-card" style={{ background: "#fffbeb", borderColor: "#f59e0b" }}>
+                <div className="sp-card-head">
+                  <span>編集中</span>
+                </div>
+                <div className="sp-card-grid">
+                  <div className="sp-wide">
+                    <label>日付</label>
+                    <input type="date" value={editValues.record_date} onChange={(e) => updateEdit({ record_date: e.target.value })} />
+                  </div>
+                  <div>
+                    <label>氏名</label>
+                    <input value={editValues.person_name} onChange={(e) => updateEdit({ person_name: e.target.value })} />
+                  </div>
+                  <div>
+                    <label>班　係</label>
+                    <input value={editValues.team} onChange={(e) => updateEdit({ team: e.target.value })} />
+                  </div>
+                  <div className="sp-wide">
+                    <label>品名</label>
+                    <select value={editValues.item_name} onChange={(e) => handleEditItemChange(e.target.value)}>
+                      {items.map((it) => (
+                        <option key={it.id} value={it.item_name}>
+                          {it.item_name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label>サイズ</label>
+                    {editSizes.length ? (
+                      <select value={editValues.size} onChange={(e) => updateEdit({ size: e.target.value })}>
+                        <option value=""></option>
+                        {editSizes.map((sz) => (
+                          <option key={sz} value={sz}>
+                            {sz}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input value={editValues.size} onChange={(e) => updateEdit({ size: e.target.value })} />
+                    )}
+                  </div>
+                  <div>
+                    <label>数量</label>
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      value={editValues.quantity}
+                      onChange={(e) => updateEdit({ quantity: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label>単価</label>
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      value={editValues.unit_price}
+                      onChange={(e) => updateEdit({ unit_price: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label>現況</label>
+                    <select value={editValues.status} onChange={(e) => updateEdit({ status: e.target.value })}>
+                      <option value=""></option>
+                      {STATUS_OPTIONS.map((st) => (
+                        <option key={st} value={st}>
+                          {st}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <div className="ls-btns">
+                  <button type="button" onClick={cancelEdit}>
+                    取消
+                  </button>
+                  <button type="button" className="ls-save" onClick={() => saveEdit(r.id)} disabled={savingEdit}>
+                    {savingEdit ? "保存中" : "保存"}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div
+                key={r.id}
+                className={"ls-card " + (r.status === "申込済" ? "row-applied" : r.status === "発注済" ? "row-ordered" : "")}
+              >
+                <div className="ls-card-head">
+                  <span>
+                    {toWareki(r.record_date)}
+                    {!isLocked && r.department ? `　${r.department}` : ""}
+                  </span>
+                  <span className="ls-status">{r.status || "-"}</span>
+                </div>
+                <div className="ls-item">
+                  <button
+                    onClick={() => setFilters((f) => ({ ...f, item: r.item_name }))}
+                    className="item-link"
+                    title="この品名で絞り込む"
+                  >
+                    {r.item_name}
+                  </button>
+                </div>
+                <div className="ls-line">
+                  <span className="ls-key">氏名</span>
+                  {r.person_name ? (
+                    <button
+                      onClick={() => setFilters((f) => ({ ...f, person: r.person_name }))}
+                      className="item-link"
+                      title="この名前で絞り込む"
+                    >
+                      {r.person_name}
+                    </button>
+                  ) : (
+                    "-"
+                  )}
+                  {r.team ? (
+                    <>
+                      <span className="ls-key" style={{ marginLeft: "12px" }}>班係</span>
+                      {r.team}
+                    </>
+                  ) : null}
+                </div>
+                <div className="ls-line">
+                  <span className="ls-key">サイズ</span>
+                  {r.size || "-"}
+                  <span className="ls-key" style={{ marginLeft: "12px" }}>数量</span>
+                  {r.quantity}
+                  <span className="ls-key" style={{ marginLeft: "12px" }}>単価</span>
+                  {r.unit_price != null ? yen(r.unit_price) : "-"}
+                </div>
+                <div className="ls-btns">
+                  <button type="button" onClick={() => startEdit(r)}>
+                    編集
+                  </button>
+                  <button type="button" onClick={() => handleDelete(r)}>
+                    削除
+                  </button>
+                </div>
+              </div>
+            )
+          )}
+        </div>
       ) : (
         <div className="overflow-x-auto border border-slate-200 rounded" style={{ maxHeight: "75vh", overflowY: "auto" }}>
           <table className="w-full text-sm">
@@ -3031,6 +3275,7 @@ function SettingsTab({ departments }) {
             "「古いデータの整理」は、この「設定」画面のいちばん上にあります（2026年10月23日に「一覧」画面から移しました。管理者メニューを開いたときだけ出ます）。指定した日付より前の記録を、チェックを付けた種類（貸与の記録・購入の記録・請求書の金額）だけまとめて削除します（2026年10月10日から種類を選べるようにしました。最初は貸与の記録だけにチェックが付いています）。貸与の記録は現況に関係なく削除し、購入の記録は購入日、請求書の金額は「何年何月分」で判断します（入力した日付の月より前の月の分を削除）。品目マスタとサイズの選択肢は消しません。",
             "「一覧」の表の見出し（日付・部署・氏名・品名・サイズ・数量・単価・現況）は、列の真ん中に置いています。表は画面の高さの4分の3ほどの枠の中で上下に動き、下へずらしても見出しの行が上に残って見えます（2026年10月14日〜）。表の中の文字の並び（左寄せ、数量・単価は右寄せ）は今までどおりです。",
             "「入力」画面（2026年10月24日〜）：部署用URLでは、表の上の「📱 スマホ」「💻 パソコン」の2つのボタンで表示を切り替えます（選んでいる方が色付き。開いたときは「スマホ」。それまでは「スマホ表示：ON／OFF」の1つのボタンでした）。「スマホ」のときは、表ではなく1件ずつのカード（「1件目」「2件目」…）に、「氏名」「班　係」「分類」「品名」「サイズ」「数量」を何行かに分けて並べます（氏名と班係、サイズと数量は横に2つ。分類・品名は1行ずつ。カードの右上に「削除」。2026年10月24日〜）。2件目からは「同上」のチェックがあり（スマホはカードのいちばん上、パソコン・管理者用URLは表の「同上」の列）、チェックするとその件の氏名・班係が1件目と同じになります（文字の色・形は1件目と同じ。1件目を直すと一緒に変わる。入った名前はその件の欄で直すこともでき、直すとその件は「同上」のチェックが外れ、直した名前のままになる）。「パソコン」にすると、管理者用URLと同じく学生・単価・備考・引継の欄も出ます。表の見出しは欄の真ん中に置いています。どちらも、上の「申込者」「入力者」の欄はなくし、「班　係」は上の欄から表の中（氏名と分類の間。1行ごとに入力）へ移しました（それまでに入力された申込者・入力者のデータは消していません）。",
+            "「一覧」画面（2026年10月25日〜）：部署用URLでは、入力画面と同じ「📱 スマホ」「💻 パソコン」の2つのボタンがあります（開いたときは「スマホ」）。「スマホ」のときは、1件ずつのカードで、日付・現況（右上）、品名（大きな字）、氏名・班係、サイズ・数量・単価、「編集」「削除」を何行かに分けて並べます。申込済は黄色、発注済は青の枠と色です。上の絞り込みの欄は2列に並べます。「編集」を押すと、そのカードが入力の欄に変わります。「パソコン」と管理者用URLは今までどおりの表です。",
             "集計画面はメニューから外しています（プログラムの中に部品は残っていますが、使われていません）。",
             "残っている作業：実際に配っている部署用URLを、マスターファイルに書き込む（上の「このアプリのURL」が参考になります）。",
           ]}
