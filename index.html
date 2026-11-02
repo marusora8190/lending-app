@@ -1706,6 +1706,13 @@ function InputTab({ departments, items, itemByName, sizesByCategory, lockedDept 
 
   const addRow = () => setRows((rs) => [...rs, emptyRow()]);
   const removeRow = (key) => setRows((rs) => rs.filter((r) => r.key !== key));
+  // 「複写」：その件のすぐ下に、同じ内容（氏名・班係・分類・品名・サイズ・数量・単価など）の件を足す（2026年11月2日〜）
+  const duplicateRow = (key) =>
+    setRows((rs) => {
+      const i = rs.findIndex((r) => r.key === key);
+      if (i < 0) return rs;
+      return [...rs.slice(0, i + 1), { ...rs[i], key: uid() }, ...rs.slice(i + 1)];
+    });
 
   const canSubmit = common.date && common.department && rows.some((r) => r.itemName.trim());
 
@@ -1864,6 +1871,15 @@ function InputTab({ departments, items, itemByName, sizesByCategory, lockedDept 
                         📋 ほかの件から写す
                       </button>
                     )}
+                    <button
+                      type="button"
+                      onClick={() => duplicateRow(r.key)}
+                      className="sp-card-del"
+                      aria-label="この件を複写"
+                      title="この件と同じ内容の件を、すぐ下に足します"
+                    >
+                      複写
+                    </button>
                     <button type="button" onClick={() => removeRow(r.key)} className="sp-card-del" aria-label="この件を削除">
                       削除
                     </button>
@@ -2094,6 +2110,14 @@ function InputTab({ departments, items, itemByName, sizesByCategory, lockedDept 
                         写す
                       </button>
                     )}
+                    <button
+                      onClick={() => duplicateRow(r.key)}
+                      style={{ marginRight: "4px" }}
+                      className="text-xs border border-amber-300 text-amber-700 rounded px-2 py-1"
+                      title="この行と同じ内容の行を、すぐ下に足します"
+                    >
+                      複写
+                    </button>
                     <button
                       onClick={() => removeRow(r.key)}
                       className="text-slate-400 hover:text-red-600 text-xs border border-slate-200 rounded px-2 py-1"
@@ -4505,13 +4529,12 @@ function PurchaseInputTab({ items, itemByName, sizesByCategory, editing, onEditD
 
   const addRow = () => setRows((rs) => [...rs, emptyPurchaseRow()]);
   const removeRow = (key) => setRows((rs) => (rs.length <= 1 ? [emptyPurchaseRow()] : rs.filter((r) => r.key !== key)));
-  // 「複写」：その行のすぐ下に、同じ品名の行を足す（サイズは空・数量は1。単価は品目マスタなどから自動で入る。2026年11月2日〜）
+  // 「複写」：その行のすぐ下に、同じ内容（品名・サイズ・数量・単価・備考）の行を足す（2026年11月2日〜。同日夕方にサイズなども写すようにした）
   const copyRow = (key) =>
     setRows((rs) => {
       const i = rs.findIndex((r) => r.key === key);
       if (i < 0 || !rs[i].item_name.trim()) return rs;
-      const n = withSuggestion({ ...emptyPurchaseRow(), item_name: rs[i].item_name }, vendor);
-      return [...rs.slice(0, i + 1), n, ...rs.slice(i + 1)];
+      return [...rs.slice(0, i + 1), { ...rs[i], key: uid() }, ...rs.slice(i + 1)];
     });
 
   const rowAmount = (r) => Math.round((parseYenInput(r.quantity) || 0) * (parseYenInput(r.unit_price) || 0));
@@ -4711,7 +4734,7 @@ function PurchaseInputTab({ items, itemByName, sizesByCategory, editing, onEditD
                           type="button"
                           onClick={() => copyRow(r.key)}
                           disabled={!r.item_name.trim()}
-                          title="この行の品名で、すぐ下に行を足します（サイズは空になります）"
+                          title="この行と同じ内容（品名・サイズ・数量・単価・備考）の行を、すぐ下に足します"
                           className="text-xs border border-amber-300 text-amber-700 rounded px-2 py-1 disabled:opacity-40"
                           style={{ marginRight: "4px" }}
                         >
@@ -4746,7 +4769,7 @@ function PurchaseInputTab({ items, itemByName, sizesByCategory, editing, onEditD
           {filledRows.length}点 ／ 合計（税抜） <strong>{yen(totalAmount)}</strong> 円
         </span>
       </div>
-      {!editingId && <p className="text-xs text-slate-500 mb-3">品名が空の行は登録しません。同じ品名をサイズ違いで入れるときは、行の右の「複写」で、すぐ下に同じ品名の行を足せます。行が足りないときは「＋ 行を追加」を押してください。</p>}
+      {!editingId && <p className="text-xs text-slate-500 mb-3">品名が空の行は登録しません。行の右の「複写」で、同じ内容（品名・サイズ・数量・単価・備考）の行をすぐ下に足せます。違うところだけ直してください。行が足りないときは「＋ 行を追加」を押してください。</p>}
       <div className="flex gap-3 mb-3">
         <button type="button" onClick={handleSubmit} disabled={saving} className={purchaseBtnPrimary}>
           {saving ? "保存中..." : editingId ? "更新する" : `${filledRows.length || ""}${filledRows.length ? "点を" : ""}登録する`}
