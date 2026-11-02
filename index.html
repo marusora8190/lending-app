@@ -1005,8 +1005,38 @@ async function sb(path, options = {}) {
 
 const DEPT_ORDER = ["営繕課", "電気課", "水道課", "造園課", "放送通信課", "建築課", "営繕部"];
 const STATUS_OPTIONS = ["申込済", "貸与済", "発注済"];
-// サイズ別の単価（2026年11月2日〜）：品目マスタの size_prices に {"3L": 6600, "4L": 7150} のように入れる（税込）。
-// 書いていないサイズは、ふつうの単価（unit_price_incl_tax）を使う。
+// ===== 消費税の率（2026年11月2日〜） =====
+// データベースの lending_tax_rates（適用開始日・率）から読む。読めないときは10％。
+// ある日の率は「その日以前でいちばん新しい適用開始日」の率。率が変わっても、それより前の日付の分は前の率で計算する。
+let TAX_RATES = [{ start_date: "2019-10-01", rate: 0.1 }];
+function setTaxRates(rows) {
+  if (!rows || !rows.length) return;
+  TAX_RATES = rows
+    .map((r) => ({ start_date: String(r.start_date).slice(0, 10), rate: Number(r.rate) }))
+    .filter((r) => r.start_date && Number.isFinite(r.rate))
+    .sort((a, b) => a.start_date.localeCompare(b.start_date));
+}
+function taxRateOn(date) {
+  const d = String(date || todayStr()).slice(0, 10);
+  let rate = TAX_RATES.length ? TAX_RATES[0].rate : 0.1;
+  for (const t of TAX_RATES) if (t.start_date <= d) rate = t.rate;
+  return rate;
+}
+const ratePct = (rate) => String(Math.round(Number(rate) * 10000) / 100);
+// 消費税（1円未満は切り捨て）。小数の誤差が出ないよう、いったん100倍の整数にしてから計算する
+function taxOf(amount, rate) {
+  return Math.floor((Math.round(Number(amount || 0) * 100) * Math.round(Number(rate) * 10000)) / 1000000 + 1e-9);
+}
+// 税抜の金額に、その日の率の消費税を足した金額（税込）
+function withTax(excl, date) {
+  if (excl == null || excl === "") return null;
+  const n = Number(excl);
+  return n + taxOf(n, taxRateOn(date));
+}
+
+// サイズ別の単価（2026年11月2日〜）：品目マスタの size_prices に {"3L": 6000, "4L": 6500} のように入れる（税抜）。
+// 書いていないサイズは、ふつうの単価（unit_price_excl_tax）を使う。
+// 品目マスタの単価は2026年11月2日から税抜。貸与の記録には、その日の率の消費税を足した税込の単価を入れる。
 function sizePriceMap(item) {
   const m = item && item.size_prices;
   return m && typeof m === "object" && !Array.isArray(m) ? m : {};
@@ -1019,7 +1049,11 @@ function itemPriceFor(item, size) {
   const m = sizePriceMap(item);
   const sz = String(size || "").trim();
   if (sz && m[sz] != null && m[sz] !== "") return Number(m[sz]);
-  return item.unit_price_incl_tax ?? null;
+  return item.unit_price_excl_tax ?? null;
+}
+// 貸与の記録に入れる単価（税込）。date は貸与の記録の日付
+function lendingPriceFor(item, size, date) {
+  return withTax(itemPriceFor(item, size), date);
 }
 const RECENT_ITEMS_KEY = "lendingApp_recentItems";
 // 今日の日付（"YYYY-MM-DD"）。日本時間で判断する
@@ -1295,6 +1329,11 @@ function App() {
         ]);
         setDepartments(d.map((r) => r.name));
         setSizeOptions(s);
+        try {
+          setTaxRates(await sb("lending_tax_rates?select=start_date,rate&order=start_date"));
+        } catch (e) {
+          // 読めないときは10％のまま使う
+        }
         await loadItems();
       } catch (e) {
         setLoadError(e.message);
@@ -1539,7 +1578,7 @@ function InputTab({ departments, items, itemByName, sizesByCategory, lockedDept 
     const item = itemByName[itemName];
     updateRow(key, {
       itemName,
-      unitPrice: item ? item.unit_price_incl_tax ?? "" : "",
+      unitPrice: item ? lendingPriceFor(item, "", common.date) ?? "" : "",
       size: "",
     });
     if (itemName) setRecentItems(saveRecentItem(itemName));
@@ -1552,7 +1591,7 @@ function InputTab({ departments, items, itemByName, sizesByCategory, lockedDept 
         if (r.key !== key) return r;
         const item = itemByName[r.itemName];
         if (!item || !hasSizePrices(item)) return { ...r, size };
-        const pr = itemPriceFor(item, size);
+        const pr = lendingPriceFor(item, size, common.date);
         return { ...r, size, unitPrice: pr ?? "" };
       })
     );
@@ -1604,7 +1643,7 @@ function InputTab({ departments, items, itemByName, sizesByCategory, lockedDept 
         if (f.size) n.size = src.size;
         {
           const it = itemByName[n.itemName];
-          if (it && hasSizePrices(it)) n.unitPrice = itemPriceFor(it, n.size) ?? "";
+          if (it && hasSizePrices(it)) n.unitPrice = lendingPriceFor(it, n.size, common.date) ?? "";
         }
         if (f.quantity) n.quantity = src.quantity;
         return n;
@@ -1729,7 +1768,7 @@ function InputTab({ departments, items, itemByName, sizesByCategory, lockedDept 
                 team: r.team,
                 itemType: r.itemType,
                 itemName: r.itemName,
-                unitPrice: r.itemName ? itemByName[r.itemName]?.unit_price_incl_tax ?? "" : "",
+                unitPrice: r.itemName ? lendingPriceFor(itemByName[r.itemName], "", common.date) ?? "" : "",
                 keepAfterSubmit: true,
               }
             : emptyRow()
@@ -2246,7 +2285,7 @@ function ListTab({ departments, items, itemByName, sizesByCategory, lockedDept }
     const item = itemByName[itemName];
     updateEdit({
       item_name: itemName,
-      unit_price: item ? item.unit_price_incl_tax ?? "" : editValues.unit_price,
+      unit_price: item ? lendingPriceFor(item, "", editValues.record_date) ?? "" : editValues.unit_price,
       size: "",
     });
   };
@@ -2254,7 +2293,7 @@ function ListTab({ departments, items, itemByName, sizesByCategory, lockedDept }
   // 編集でサイズを変えたとき：サイズ別の単価がある品物なら、そのサイズの単価にする（2026年11月2日〜）
   const handleEditSizeChange = (size) => {
     const item = itemByName[editValues.item_name];
-    if (item && hasSizePrices(item)) updateEdit({ size, unit_price: itemPriceFor(item, size) ?? "" });
+    if (item && hasSizePrices(item)) updateEdit({ size, unit_price: lendingPriceFor(item, size, editValues.record_date) ?? "" });
     else updateEdit({ size });
   };
 
@@ -3438,6 +3477,164 @@ async function downloadLatestFromGitHub(btn) {
   }
 }
 
+// 消費税の率の設定（2026年11月2日〜）。見るのは誰でも、足す・消すは管理者パスワードが必要（データベースでも管理者だけ）
+async function sbAdminWrite(path, method, body) {
+  const token = await getAdminToken("消費税の率を変えるには管理者パスワードを入力してください。");
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+    method,
+    headers: {
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+      Prefer: "return=representation",
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!res.ok) {
+    let msg = res.statusText;
+    try {
+      const j = await res.json();
+      msg = j.message || j.hint || msg;
+    } catch (e) {}
+    throw new Error(msg);
+  }
+  const text = await res.text();
+  const data = text ? JSON.parse(text) : [];
+  if (!data.length) throw new Error("変更できませんでした（管理者としてログインできていない可能性があります）");
+  return data;
+}
+
+function TaxRateSettings() {
+  const [rows, setRows] = useState([]);
+  const [newDate, setNewDate] = useState("");
+  const [newPct, setNewPct] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+  const [err, setErr] = useState("");
+
+  const load = useCallback(async () => {
+    try {
+      const r = await sb("lending_tax_rates?select=start_date,rate&order=start_date");
+      setRows(r || []);
+      setTaxRates(r);
+    } catch (e) {
+      setErr("読み込みに失敗しました: " + e.message);
+    }
+  }, []);
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const add = async () => {
+    setMsg("");
+    setErr("");
+    const pct = parseYenInput(String(newPct).replace(/[%％]/g, ""));
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(newDate)) return setErr("適用開始日を選んでください。");
+    if (pct === null || pct < 0 || pct >= 100) return setErr("率を％で入れてください（例：10）。");
+    if (rows.some((r) => String(r.start_date).slice(0, 10) === newDate)) return setErr("同じ適用開始日の行があります。先に消してから足してください。");
+    if (!window.confirm(`${toWareki(newDate)} から消費税を ${pct}％ にします。よろしいですか？`)) return;
+    setBusy(true);
+    try {
+      await sbAdminWrite("lending_tax_rates", "POST", { start_date: newDate, rate: Math.round(pct * 100) / 10000 });
+      setNewDate("");
+      setNewPct("");
+      setMsg(`${toWareki(newDate)} から ${pct}％ を足しました。開いているほかの画面は、読み込み直すと新しい率になります。`);
+      await load();
+    } catch (e) {
+      setErr("保存に失敗しました: " + e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const remove = async (r) => {
+    setMsg("");
+    setErr("");
+    if (rows.length <= 1) return setErr("率は1つ以上必要です。");
+    const d = String(r.start_date).slice(0, 10);
+    if (!window.confirm(`${toWareki(d)} からの ${ratePct(r.rate)}％ の行を消します。よろしいですか？`)) return;
+    setBusy(true);
+    try {
+      await sbAdminWrite(`lending_tax_rates?start_date=eq.${d}`, "DELETE");
+      await load();
+    } catch (e) {
+      setErr("削除に失敗しました: " + e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const today = todayStr();
+  let currentIdx = -1;
+  rows.forEach((r, i) => {
+    if (String(r.start_date).slice(0, 10) <= today) currentIdx = i;
+  });
+
+  return (
+    <div style={{ fontSize: "14px" }}>
+      <p style={{ fontSize: "13px", color: "#64748b", marginBottom: "8px" }}>
+        品目マスタ・購入の単価は税抜で入れ、ここの率で消費税を計算します（貸与の記録の単価〔税込〕・請求書照合の消費税）。
+        消費税が変わるときは、新しい率と、その率になる日（適用開始日）を足してください。その日より前の日付の分は、前の率のまま計算します。
+        すでに保存した貸与の記録の単価は変わりません。足す・消すには管理者パスワードが必要です。
+      </p>
+      <table className="text-sm" style={{ borderCollapse: "collapse", marginBottom: "8px" }}>
+        <thead>
+          <tr style={{ background: "#f1f5f9", color: "#475569" }}>
+            <th style={{ padding: "4px 12px", textAlign: "left" }}>適用開始日</th>
+            <th style={{ padding: "4px 12px", textAlign: "right" }}>率</th>
+            <th style={{ padding: "4px 12px" }}></th>
+            <th style={{ padding: "4px 12px" }}></th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r, i) => (
+            <tr key={r.start_date} style={{ borderTop: "1px solid #e2e8f0" }}>
+              <td style={{ padding: "4px 12px" }}>{toWareki(String(r.start_date).slice(0, 10))}〜</td>
+              <td style={{ padding: "4px 12px", textAlign: "right" }}>{ratePct(r.rate)}％</td>
+              <td style={{ padding: "4px 12px", color: "#15803d", fontWeight: 600 }}>
+                {i === currentIdx ? "今の率" : String(r.start_date).slice(0, 10) > today ? "これから" : ""}
+              </td>
+              <td style={{ padding: "4px 12px" }}>
+                <button
+                  type="button"
+                  onClick={() => remove(r)}
+                  disabled={busy}
+                  className="text-xs border border-slate-200 rounded px-2 py-1 text-slate-500"
+                >
+                  削除
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div style={{ display: "flex", gap: "8px", alignItems: "end", flexWrap: "wrap" }}>
+        <label style={{ display: "flex", flexDirection: "column", fontSize: "12px", color: "#475569" }}>
+          適用開始日
+          <input type="date" value={newDate} onChange={(e) => setNewDate(e.target.value)} className="border border-slate-300 rounded px-2 py-1 text-sm" />
+        </label>
+        <label style={{ display: "flex", flexDirection: "column", fontSize: "12px", color: "#475569" }}>
+          率（％）
+          <input
+            type="text"
+            inputMode="decimal"
+            value={newPct}
+            onChange={(e) => setNewPct(e.target.value)}
+            placeholder="例：12"
+            className="border border-slate-300 rounded px-2 py-1 text-sm"
+            style={{ width: "80px", textAlign: "right" }}
+          />
+        </label>
+        <button type="button" onClick={add} disabled={busy} className="bg-amber-600 text-white rounded px-3 py-1.5 text-sm">
+          {busy ? "保存中…" : "＋ 率を足す"}
+        </button>
+      </div>
+      {msg && <p style={{ color: "#15803d", fontSize: "13px", marginTop: "6px" }}>{msg}</p>}
+      {err && <p style={{ color: "#b91c1c", fontSize: "13px", marginTop: "6px" }}>{err}</p>}
+    </div>
+  );
+}
+
 function SettingsTab({ departments }) {
   const [copied, setCopied] = useState("");
   const baseUrl = useMemo(() => {
@@ -3480,6 +3677,10 @@ function SettingsTab({ departments }) {
       </div>
 
       <CleanupSection />
+
+      <SettingsSection title="💴 消費税の率">
+        <TaxRateSettings />
+      </SettingsSection>
 
       <SettingsSection title="🔗 このアプリのURL（部署ごとの配布用）" defaultOpen>
         <div>
@@ -3655,8 +3856,8 @@ function SettingsTab({ departments }) {
             "「入力」画面（2026年10月24日〜）：部署用URLでは、表の上の「📱 スマホ」「💻 パソコン」の2つのボタンで表示を切り替えます（選んでいる方が色付き。開いたときは「スマホ」。それまでは「スマホ表示：ON／OFF」の1つのボタンでした）。「スマホ」のときは、表ではなく1件ずつのカード（「1件目」「2件目」…）に、「氏名」「班　係」「分類」「品名」「サイズ」「数量」を何行かに分けて並べます（氏名と班係、サイズと数量は横に2つ。分類・品名は1行ずつ。カードの右上に「削除」。2026年10月24日〜）。2件目からの件には「📋 ほかの件から写す」（パソコン・管理者用URLは表の右の「写す」。1件目には出ない）があり、押すと「どの件から写しますか」（自分より前の件のボタン。2件目では1件目だけ、3件目では1件目・2件目…。最初は1件目）と、氏名・班係・分類・品名・サイズ・数量のチェックが出て、選んだ件から選んだ項目だけを写せます（品名を写すときは分類も一緒に写す。写したあとは自由に直せる。チェックの選び方は次に開いたときも残る。2026年10月25日〜。10月24日に付けた「同上」のチェックは、利用者の希望で10月25日になくしました）。氏名は必須です（2026年10月25日〜。品名を入れた件に氏名が無いと申し込めず、「○件目に氏名がありません」と出て、その氏名の欄が赤くなります。見出しに赤い字で「※必須」）。「パソコン」にすると、管理者用URLと同じく学生・単価・備考・引継の欄も出ます。表の見出しは欄の真ん中に置いています。どちらも、上の「申込者」「入力者」の欄はなくし、「班　係」は上の欄から表の中（氏名と分類の間。1行ごとに入力）へ移しました（それまでに入力された申込者・入力者のデータは消していません）。",
             "「一覧」画面（2026年10月25日〜）：部署用URLでは、入力画面と同じ「📱 スマホ」「💻 パソコン」の2つのボタンがあります（開いたときは「スマホ」）。「スマホ」のときは、1件ずつのカードで、日付・現況（右上）、品名、氏名・班係、サイズ・数量・単価、「編集」「削除」を何行かに分けて並べます（品名・氏名の文字は、班係・サイズ・単価と同じ大きさ）。申込済は黄色、発注済は青の枠と色です。上の絞り込みの欄は2列に並べます。「編集」を押すと、そのカードが入力の欄に変わります。「パソコン」と管理者用URLは今までどおりの表です。",
             "「一覧」で何件か選んで現況をまとめて変える（2026年11月2日〜。管理者用URLの表だけ）：表のいちばん左のチェックで記録を選び（見出しのチェックで表示している全部。Shift を押しながら押すと、前に押した行からその行までをまとめて選べます）、表の上の帯で現況を選んで「まとめて保存」を押すと、確かめのあとで選んだ記録の現況だけを書き換えます。ほかの欄は変わりません。部署用URL（`?dept=`）には出しません。",
-            "購入の単価は税抜で入れます（2026年11月2日〜。それまでは税込）。購入入力の単価の自動入力は、前回の単価、なければ品目マスタの単価（税込）を税抜にした値（1.1で割って1円未満を四捨五入）。請求書照合では、業者ごとのシステム集計（税抜）に消費税（10％・1円未満は切り捨て）を足した「合計（税込）」を請求書の金額とくらべます（差額＝請求書−合計）。品目マスタ・貸与の記録の単価は今までどおり税込です。それまでに入っていた購入の記録4件は、同日に税抜の単価に直しました。",
-            "サイズ別の単価（2026年11月2日〜）：品目マスタの単価の下の「＋サイズ別」を押すと、その品物のサイズごとに単価（税込）を入れられます（例：防寒ブルゾンの3L・4Lだけ高い）。空のサイズは、ふつうの単価になります。入力画面・一覧の編集でサイズを選ぶと、そのサイズの単価が自動で入ります。購入入力では、そのサイズの単価を税抜にした値（または前回の同じサイズの単価）が入ります。保存先は items の size_prices（例 {\"3L\":6600}）。",
+            "購入の単価は税抜で入れます（2026年11月2日〜。それまでは税込）。購入入力の単価の自動入力は、前回の単価、なければ品目マスタの単価（税抜）。請求書照合では、業者ごとのシステム集計（税抜）に消費税（購入日の率・1円未満は切り捨て）を足した「合計（税込）」を請求書の金額とくらべます（差額＝請求書−合計）。品目マスタの単価も2026年11月2日から税抜です（それまでの値は1.1で割って直しました）。貸与の記録の単価は今までどおり税込で、品目マスタの税抜にその日の率の消費税（1円未満切り捨て）を足した値が入ります。消費税の率は、この画面のいちばん上の「💴 消費税の率」で、適用開始日ごとに足せます（表 lending_tax_rates。足す・消すは管理者だけ）。それまでに入っていた購入の記録4件は、同日に税抜の単価に直しました。",
+            "サイズ別の単価（2026年11月2日〜）：品目マスタの単価の下の「＋サイズ別」を押すと、その品物のサイズごとに単価（税抜）を入れられます（例：防寒ブルゾンの3L・4Lだけ高い）。空のサイズは、ふつうの単価になります。入力画面・一覧の編集でサイズを選ぶと、そのサイズの単価が自動で入ります。購入入力では、そのサイズの単価（または前回の同じサイズの単価）が入ります。保存先は items の size_prices（例 {\"3L\":6000}）。",
             "集計画面はメニューから外しています（プログラムの中に部品は残っていますが、使われていません）。",
             "残っている作業：実際に配っている部署用URLを、マスターファイルに書き込む（上の「このアプリのURL」が参考になります）。",
           ]}
@@ -3690,7 +3891,7 @@ function MastersTab({ items, onChanged, departments, sizesByCategory }) {
   const [savingId, setSavingId] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
   const [error, setError] = useState("");
-  const [newItem, setNewItem] = useState({ item_name: "", category: "", item_type: "", department_scope: "", unit_price_incl_tax: "", item_code: "" });
+  const [newItem, setNewItem] = useState({ item_name: "", category: "", item_type: "", department_scope: "", unit_price_excl_tax: "", item_code: "" });
   const [adding, setAdding] = useState(false);
 
   const itemTypeOptions = useMemo(() => getItemTypeOptions(items).filter((t) => t !== "未分類"), [items]);
@@ -3698,7 +3899,7 @@ function MastersTab({ items, onChanged, departments, sizesByCategory }) {
   const nameFor = (it) => (editNames[it.id] !== undefined ? editNames[it.id] : it.item_name ?? "");
   const codeFor = (it) => (editCodes[it.id] !== undefined ? editCodes[it.id] : it.item_code ?? "");
   const priceFor = (it) =>
-    editPrices[it.id] !== undefined ? editPrices[it.id] : it.unit_price_incl_tax ?? "";
+    editPrices[it.id] !== undefined ? editPrices[it.id] : it.unit_price_excl_tax ?? "";
   const typeFor = (it) => (editTypes[it.id] !== undefined ? editTypes[it.id] : it.item_type ?? "");
   const categoryFor = (it) => (editCategories[it.id] !== undefined ? editCategories[it.id] : it.category ?? "");
   const deptScopeFor = (it) => (editDeptScopes[it.id] !== undefined ? editDeptScopes[it.id] : it.department_scope ?? "");
@@ -3732,7 +3933,11 @@ function MastersTab({ items, onChanged, departments, sizesByCategory }) {
     const body = {};
     if (nameValue !== undefined && nameValue.trim() !== "") body.item_name = nameValue.trim();
     if (codeValue !== undefined) body.item_code = codeValue.trim() || null;
-    if (priceValue !== undefined && priceValue !== "") body.unit_price_incl_tax = Number(priceValue);
+    // 単価は税抜で保存する（2026年11月2日〜）。unit_price_incl_tax には今日の率の税込も入れておく（画面では使わない）
+    if (priceValue !== undefined && priceValue !== "") {
+      body.unit_price_excl_tax = Number(priceValue);
+      body.unit_price_incl_tax = withTax(Number(priceValue));
+    }
     if (typeValue !== undefined) body.item_type = typeValue || null;
     if (categoryValue !== undefined) body.category = categoryValue || null;
     if (deptScopeValue !== undefined) body.department_scope = deptScopeValue || null;
@@ -3849,12 +4054,13 @@ function MastersTab({ items, onChanged, departments, sizesByCategory }) {
           category: newItem.category || null,
           item_type: newItem.item_type.trim() || null,
           department_scope: newItem.department_scope || null,
-          unit_price_incl_tax: newItem.unit_price_incl_tax === "" ? null : Number(newItem.unit_price_incl_tax),
+          unit_price_excl_tax: newItem.unit_price_excl_tax === "" ? null : Number(newItem.unit_price_excl_tax),
+          unit_price_incl_tax: newItem.unit_price_excl_tax === "" ? null : withTax(Number(newItem.unit_price_excl_tax)),
           item_code: newItem.item_code || null,
           sort_order: 9999,
         },
       });
-      setNewItem({ item_name: "", category: "", item_type: "", department_scope: "", unit_price_incl_tax: "", item_code: "" });
+      setNewItem({ item_name: "", category: "", item_type: "", department_scope: "", unit_price_excl_tax: "", item_code: "" });
       await onChanged();
     } catch (e) {
       setError("追加に失敗しました: " + e.message);
@@ -3916,11 +4122,11 @@ function MastersTab({ items, onChanged, departments, sizesByCategory }) {
             <option value="Z">Z（S・F・O・XO）</option>
           </select>
         </Field>
-        <Field label="単価（税込）">
+        <Field label="単価（税抜）">
           <input
             type="number"
-            value={newItem.unit_price_incl_tax}
-            onChange={(e) => setNewItem({ ...newItem, unit_price_incl_tax: e.target.value })}
+            value={newItem.unit_price_excl_tax}
+            onChange={(e) => setNewItem({ ...newItem, unit_price_excl_tax: e.target.value })}
             className="w-full border border-slate-300 rounded px-2 py-1.5 text-sm"
           />
         </Field>
@@ -3945,7 +4151,7 @@ function MastersTab({ items, onChanged, departments, sizesByCategory }) {
               <th className="px-2 py-2 text-left w-40">部署区分</th>
               <th className="px-2 py-2 text-left w-40">品種分類</th>
               <th className="px-2 py-2 text-left w-20">サイズ区分</th>
-              <th className="px-2 py-2 text-left w-32">単価（税込）</th>
+              <th className="px-2 py-2 text-left w-32">単価（税抜）</th>
               <th className="px-2 py-2 w-32"></th>
             </tr>
           </thead>
@@ -3953,7 +4159,7 @@ function MastersTab({ items, onChanged, departments, sizesByCategory }) {
             {items.map((it) => {
               const nameChanged = editNames[it.id] !== undefined && editNames[it.id] !== it.item_name;
               const codeChanged = editCodes[it.id] !== undefined && editCodes[it.id] !== (it.item_code ?? "");
-              const priceChanged = editPrices[it.id] !== undefined && editPrices[it.id] !== String(it.unit_price_incl_tax ?? "");
+              const priceChanged = editPrices[it.id] !== undefined && editPrices[it.id] !== String(it.unit_price_excl_tax ?? "");
               const typeChanged = editTypes[it.id] !== undefined && editTypes[it.id] !== (it.item_type ?? "");
               const categoryChanged = editCategories[it.id] !== undefined && editCategories[it.id] !== (it.category ?? "");
               const deptScopeChanged = editDeptScopes[it.id] !== undefined && editDeptScopes[it.id] !== (it.department_scope ?? "");
@@ -4051,7 +4257,7 @@ function MastersTab({ items, onChanged, departments, sizesByCategory }) {
                   <tr className="bg-amber-50">
                     <td colSpan={7} className="px-3 py-2">
                       <div className="text-xs text-slate-600 mb-2">
-                        「{it.item_name}」のサイズ別の単価（税込）。ふつうの単価（{it.unit_price_incl_tax == null ? "未設定" : yen(it.unit_price_incl_tax) + "円"}）と違うサイズだけ入れてください。空のサイズは、ふつうの単価になります。
+                        「{it.item_name}」のサイズ別の単価（税抜）。ふつうの単価（{it.unit_price_excl_tax == null ? "未設定" : yen(it.unit_price_excl_tax) + "円"}）と違うサイズだけ入れてください。空のサイズは、ふつうの単価になります。
                       </div>
                       {spSizes.length === 0 ? (
                         <div className="text-xs text-red-600">先に「サイズ区分」を選んで保存してください。</div>
@@ -4064,7 +4270,7 @@ function MastersTab({ items, onChanged, departments, sizesByCategory }) {
                                 type="text"
                                 inputMode="numeric"
                                 value={sizeDraft[sz] ?? ""}
-                                placeholder={it.unit_price_incl_tax == null ? "" : yen(it.unit_price_incl_tax)}
+                                placeholder={it.unit_price_excl_tax == null ? "" : yen(it.unit_price_excl_tax)}
                                 onChange={(e) => setSizeDraft((d) => ({ ...d, [sz]: e.target.value }))}
                               />
                             </label>
@@ -4135,10 +4341,7 @@ async function fetchAllInvoices(filter) {
   return all;
 }
 
-// 消費税の率（10％）。購入の単価は税抜で入れ、請求書照合で業者ごとに消費税を足す（2026年11月2日〜）
-const PURCHASE_TAX_RATE = 0.1;
-// 消費税（1円未満は切り捨て）。小数の誤差が出ないよう、いったん100倍の整数にしてから計算する
-const purchaseTax = (amount) => Math.floor(Math.round(Number(amount || 0) * 100) * PURCHASE_TAX_RATE / 100 + 1e-9);
+// 購入の単価は税抜で入れ、請求書照合で業者ごとに消費税を足す（2026年11月2日〜。率は上の TAX_RATES・taxRateOn・taxOf）
 
 // 今月1日（日本時間、"YYYY-MM-DD"）。請求書照合の期間の最初の値に使う
 const monthStartStr = () => todayStr().slice(0, 8) + "01";
@@ -4248,11 +4451,11 @@ function PurchaseInputTab({ items, itemByName, sizesByCategory, editing, onEditD
       (r) => r.item_name === n && (!vv || r.vendor_name === vv) && r.unit_price != null && (!bySize || (r.size || "").trim() === sz)
     );
     if (last) return { price: last.unit_price, hint: `前回（${toWareki(last.purchase_date)}・${last.vendor_name}${bySize && sz ? "・" + sz : ""}）の単価` };
-    const incl = itemPriceFor(it, sz);
-    if (incl != null)
+    const ex = itemPriceFor(it, sz);
+    if (ex != null)
       return {
-        price: Math.round(Number(incl) / (1 + PURCHASE_TAX_RATE)),
-        hint: `品目マスタの単価（${bySize && sizePriceMap(it)[sz] != null ? sz + "・" : ""}税込 ${yen(incl)}円）を税抜にした値`,
+        price: Number(ex),
+        hint: `品目マスタの単価（${bySize && sizePriceMap(it)[sz] != null ? sz + "・" : ""}税抜）`,
       };
     return { price: null, hint: "単価が見つかりません。手で入力してください" };
   };
@@ -4847,7 +5050,19 @@ function InvoiceTab() {
     }
   };
 
-  // 消費税は業者ごとに「システム集計 × 10％（1円未満切り捨て）」で計算し、合計（税込）を請求書の金額とくらべる（2026年11月2日〜）
+  // 消費税は業者ごとに「システム集計 × 購入日の率（1円未満切り捨て）」で計算し、合計（税込）を請求書の金額とくらべる（2026年11月2日〜）
+  // 購入日の消費税の率ごとに分けて足し、率ごとに消費税を出す（率が変わった月でも正しく計算するため）。
+  // 率は画面を開いたあとで読み込まれることがあるため、毎回ここで計算する
+  Object.values(sysByVendor).forEach((x) => {
+    const byRate = {};
+    x.rows.forEach((r) => {
+      const rate = taxRateOn(r.purchase_date);
+      byRate[rate] = (byRate[rate] || 0) + Number(r.amount || 0);
+    });
+    const rates = Object.keys(byRate);
+    x.tax = rates.reduce((sum, k) => sum + taxOf(byRate[k], Number(k)), 0);
+    x.rateLabel = rates.map((k) => ratePct(k) + "％").join("・");
+  });
   let sysTotal = 0;
   let taxTotal = 0;
   let billedTotal = 0;
@@ -4855,7 +5070,7 @@ function InvoiceTab() {
   vendors.forEach((v) => {
     const a = sysByVendor[v] ? sysByVendor[v].amount : 0;
     sysTotal += a;
-    taxTotal += purchaseTax(a);
+    taxTotal += sysByVendor[v] ? sysByVendor[v].tax : 0;
     if (invByVendor[v]) {
       billedTotal += Number(invByVendor[v].amount);
       anyBilled = true;
@@ -4889,7 +5104,7 @@ function InvoiceTab() {
         </Field>
       </div>
       <p className="text-xs text-slate-500 mb-3">
-        指定した期間の「購入入力」の記録を業者ごとに合計し（税抜）、消費税（10％）を足した「合計（税込）」を請求書の金額と突き合わせます。請求書の金額は、期間の終わりの日が入っている月の請求分として保存されます
+        指定した期間の「購入入力」の記録を業者ごとに合計し（税抜）、消費税（購入日の率。今は{ratePct(taxRateOn())}％）を足した「合計（税込）」を請求書の金額と突き合わせます。請求書の金額は、期間の終わりの日が入っている月の請求分として保存されます
         {validPeriod ? `（今の設定では ${Number(year)}年${Number(month)}月分）` : ""}。金額を入れて、欄の外を押すか Enter キーを押すと保存されます。
       </p>
 
@@ -4904,7 +5119,7 @@ function InvoiceTab() {
               <th className="px-2 py-2 text-left">業者</th>
               <th className="px-2 py-2 text-right">件数</th>
               <th className="px-2 py-2 text-right">システム集計（税抜）</th>
-              <th className="px-2 py-2 text-right">消費税（10％）</th>
+              <th className="px-2 py-2 text-right">消費税</th>
               <th className="px-2 py-2 text-right">合計（税込）</th>
               <th className="px-2 py-2 text-right">請求書金額</th>
               <th className="px-2 py-2 text-right">差額</th>
@@ -4927,7 +5142,7 @@ function InvoiceTab() {
               vendors.map((v) => {
                 const sys = sysByVendor[v] || { amount: 0, count: 0, rows: [] };
                 const inv = invByVendor[v];
-                const tax = purchaseTax(sys.amount);
+                const tax = sys.tax || 0;
                 const incl = sys.amount + tax;
                 const billed = inv ? Number(inv.amount) : null;
                 const diff = billed === null ? null : billed - incl;
@@ -4939,7 +5154,9 @@ function InvoiceTab() {
                       <td className="px-2 py-1.5">{v}</td>
                       <td className="px-2 py-1.5 text-right">{sys.count}件</td>
                       <td className="px-2 py-1.5 text-right">{yen(sys.amount)}円</td>
-                      <td className="px-2 py-1.5 text-right">{yen(tax)}円</td>
+                      <td className="px-2 py-1.5 text-right">
+                        {yen(tax)}円{sys.rateLabel ? <span className="text-xs text-slate-400">（{sys.rateLabel}）</span> : null}
+                      </td>
                       <td className="px-2 py-1.5 text-right" style={{ fontWeight: 600 }}>{yen(incl)}円</td>
                       <td className="px-2 py-1.5 text-right">
                         <input
@@ -5026,7 +5243,7 @@ function InvoiceTab() {
             <div style={{ fontSize: "18px", fontWeight: 600 }}>{yen(sysTotal)}円</div>
           </div>
           <div style={cardStyle}>
-            <div className="text-xs text-slate-500">消費税合計（10％）</div>
+            <div className="text-xs text-slate-500">消費税合計</div>
             <div style={{ fontSize: "18px", fontWeight: 600 }}>{yen(taxTotal)}円</div>
           </div>
           <div style={cardStyle}>
@@ -5042,7 +5259,7 @@ function InvoiceTab() {
         </div>
       )}
       <p className="text-xs text-slate-500 mt-2" style={{ marginTop: "12px" }}>
-        ※購入の単価は税抜で入力します（2026年11月2日〜）。消費税（10％・1円未満は切り捨て）は業者ごとにシステム集計から計算し、「合計（税込）」を請求書の金額とくらべます。請求書が品物ごとに消費税を計算している場合は、1円〜数円の差が出ることがあります。
+        ※購入の単価は税抜で入力します（2026年11月2日〜）。消費税（購入日の率・1円未満は切り捨て。率は「設定」の「💴 消費税の率」）は業者ごとにシステム集計から計算し、「合計（税込）」を請求書の金額とくらべます。請求書が品物ごとに消費税を計算している場合は、1円〜数円の差が出ることがあります。
       </p>
     </div>
   );
