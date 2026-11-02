@@ -398,6 +398,16 @@ input, select {
 .row-applied:hover { background: #fcd34d; }
 .row-ordered { background: #bfdbfe; }
 .row-ordered:hover { background: #93c5fd; }
+/* 一覧で選んだ行と、現況をまとめて変える帯（2026年11月2日〜） */
+.row-checked td { box-shadow: inset 0 2px 0 #ea580c, inset 0 -2px 0 #ea580c; }
+.row-checked td:first-child { box-shadow: inset 2px 2px 0 #ea580c, inset 0 -2px 0 #ea580c; }
+.bulk-check { width: 16px; height: 16px; cursor: pointer; vertical-align: middle; }
+.bulk-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 6px; padding: 6px 10px; border: 1px solid #fdba74; background: #fff7ed; border-radius: 6px; font-size: 14px; }
+.bulk-count b { color: #c2410c; }
+.bulk-save { border: 1px solid #ea580c; background: #ea580c; color: #fff; border-radius: 4px; padding: 4px 12px; font-weight: 600; }
+.bulk-save:disabled { opacity: 0.45; cursor: not-allowed; }
+.bulk-clear { border: 1px solid #cbd5e1; background: #fff; color: #475569; border-radius: 4px; padding: 4px 10px; }
+.bulk-hint { color: #94a3b8; font-size: 12px; }
 /* 一覧の「📱 スマホ」表示：1件ずつのカード（2026年10月25日〜） */
 .ls-card {
   border: 1px solid #e2e8f0;
@@ -2100,6 +2110,12 @@ function ListTab({ departments, items, itemByName, sizesByCategory, lockedDept }
   const [editingId, setEditingId] = useState(null);
   const [editValues, setEditValues] = useState({});
   const [savingEdit, setSavingEdit] = useState(false);
+  // 一覧で何件か選んで、現況をまとめて変える（管理者用URLの表だけ。2026年11月2日〜）
+  const showBulk = !isLocked && !simpleMode;
+  const [checkedIds, setCheckedIds] = useState([]);
+  const [bulkStatus, setBulkStatus] = useState("");
+  const [savingBulk, setSavingBulk] = useState(false);
+  const lastCheckedIndexRef = React.useRef(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -2231,6 +2247,81 @@ function ListTab({ departments, items, itemByName, sizesByCategory, lockedDept }
     const priority = (r) => (r.status === "申込済" ? 0 : r.status === "発注済" ? 1 : r.status === "貸与済" ? 2 : 3);
     return [...rows].sort((a, b) => priority(a) - priority(b));
   }, [rows]);
+
+  // 一覧から消えた記録（絞り込みを変えたときなど）は、選んだものから外す
+  useEffect(() => {
+    const present = new Set(rows.map((r) => r.id));
+    setCheckedIds((prev) => {
+      const next = prev.filter((id) => present.has(id));
+      return next.length === prev.length ? prev : next;
+    });
+    lastCheckedIndexRef.current = null;
+  }, [rows]);
+
+  const checkedSet = useMemo(() => new Set(checkedIds), [checkedIds]);
+  const allChecked = sortedRows.length > 0 && sortedRows.every((r) => checkedSet.has(r.id));
+
+  // Shift を押しながらチェックすると、前にチェックした行からその行までをまとめて選ぶ（外す）
+  const toggleChecked = (id, index, shiftKey) => {
+    const last = lastCheckedIndexRef.current;
+    setCheckedIds((prev) => {
+      const set = new Set(prev);
+      const turnOn = !set.has(id);
+      if (shiftKey && last != null && last !== index) {
+        const a = Math.min(last, index);
+        const b = Math.max(last, index);
+        for (let i = a; i <= b; i++) {
+          const rid = sortedRows[i] && sortedRows[i].id;
+          if (!rid) continue;
+          if (turnOn) set.add(rid);
+          else set.delete(rid);
+        }
+      } else if (turnOn) set.add(id);
+      else set.delete(id);
+      return [...set];
+    });
+    lastCheckedIndexRef.current = index;
+  };
+
+  const toggleAllChecked = () => {
+    setCheckedIds(allChecked ? [] : sortedRows.map((r) => r.id));
+    lastCheckedIndexRef.current = null;
+  };
+
+  const saveBulkStatus = async () => {
+    const ids = checkedIds.slice();
+    if (!ids.length) return;
+    if (!bulkStatus) {
+      window.alert("変えたい現況を選んでください。");
+      return;
+    }
+    if (!window.confirm(`選んだ ${ids.length}件の現況を「${bulkStatus}」にします。よろしいですか？`)) return;
+    setSavingBulk(true);
+    try {
+      const updatedAll = [];
+      for (let i = 0; i < ids.length; i += 100) {
+        const chunk = ids.slice(i, i + 100);
+        const upd = await sb(`lending_records?id=in.(${chunk.join(",")})`, {
+          method: "PATCH",
+          body: { status: bulkStatus },
+        });
+        if (upd) updatedAll.push(...upd);
+      }
+      const byId = new Map(updatedAll.map((u) => [u.id, u]));
+      setRows((rs) => rs.map((r) => byId.get(r.id) || r));
+      setCheckedIds([]);
+      lastCheckedIndexRef.current = null;
+      if (updatedAll.length !== ids.length) {
+        window.alert(`${ids.length}件のうち ${updatedAll.length}件だけ変わりました。一覧を読み込み直します。`);
+        load();
+      }
+    } catch (e) {
+      window.alert("現況の保存に失敗しました: " + e.message + "\n一覧を読み込み直します。");
+      load();
+    } finally {
+      setSavingBulk(false);
+    }
+  };
 
   return (
     <div>
@@ -2525,11 +2616,52 @@ function ListTab({ departments, items, itemByName, sizesByCategory, lockedDept }
           )}
         </div>
       ) : (
+        <>
+        {showBulk && (
+          <div className="bulk-bar">
+            <span className="bulk-count">
+              選んだ件数：<b>{checkedIds.length}</b>件
+            </span>
+            <span>現況を</span>
+            <select
+              value={bulkStatus}
+              onChange={(e) => setBulkStatus(e.target.value)}
+              className="border border-slate-300 rounded px-2 py-1 text-sm"
+            >
+              <option value="">（選ぶ）</option>
+              {STATUS_OPTIONS.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+            <span>にして</span>
+            <button
+              type="button"
+              onClick={saveBulkStatus}
+              disabled={savingBulk || !checkedIds.length || !bulkStatus}
+              className="bulk-save"
+            >
+              {savingBulk ? "保存中…" : "まとめて保存"}
+            </button>
+            {checkedIds.length > 0 && (
+              <button type="button" onClick={() => setCheckedIds([])} className="bulk-clear">
+                選択を解除
+              </button>
+            )}
+            <span className="bulk-hint">左のチェックで選びます（Shift を押しながら押すと、続けてまとめて選べます）</span>
+          </div>
+        )}
         <div className="overflow-x-auto border border-slate-200 rounded" style={{ maxHeight: "75vh", overflowY: "auto" }}>
           <table className="w-full text-sm">
             {/* 見出し（日付〜現況）は列の真ん中に置き、下へずらしても上に固定して表示（2026年10月14日〜） */}
             <thead className="bg-slate-100 text-slate-600" style={{ position: "sticky", top: 0, zIndex: 2 }}>
               <tr>
+                {showBulk && (
+                  <th className="px-2 py-2 text-center" style={{ width: "32px" }}>
+                    <input type="checkbox" checked={allChecked} onChange={toggleAllChecked} title="表示している全部を選ぶ／外す" className="bulk-check" />
+                  </th>
+                )}
                 <th className="px-2 py-2 text-center w-16">日付</th>
                 <th className="px-2 py-2 text-center">部署</th>
                 <th className="px-2 py-2 text-center">氏名</th>
@@ -2542,9 +2674,10 @@ function ListTab({ departments, items, itemByName, sizesByCategory, lockedDept }
               </tr>
             </thead>
             <tbody>
-              {sortedRows.map((r) =>
+              {sortedRows.map((r, idx) =>
                 editingId === r.id ? (
                   <tr key={r.id} className="border-t border-slate-100 bg-amber-50">
+                    {showBulk && <td></td>}
                     <td className="px-2 py-1">
                       <input
                         type="date"
@@ -2661,9 +2794,21 @@ function ListTab({ departments, items, itemByName, sizesByCategory, lockedDept }
                     key={r.id}
                     className={
                       "border-t border-slate-100 " +
-                      (r.status === "申込済" ? "row-applied" : r.status === "発注済" ? "row-ordered" : "")
+                      (r.status === "申込済" ? "row-applied" : r.status === "発注済" ? "row-ordered" : "") +
+                      (showBulk && checkedSet.has(r.id) ? " row-checked" : "")
                     }
                   >
+                    {showBulk && (
+                      <td className="px-2 py-1.5 text-center">
+                        <input
+                          type="checkbox"
+                          checked={checkedSet.has(r.id)}
+                          onChange={() => {}}
+                          onClick={(e) => toggleChecked(r.id, idx, e.shiftKey)}
+                          className="bulk-check"
+                        />
+                      </td>
+                    )}
                     <td className="px-2 py-1.5 whitespace-nowrap">{toWareki(r.record_date)}</td>
                     <td className="px-2 py-1.5">{r.department || "-"}</td>
                     <td className="px-2 py-1.5">
@@ -2711,7 +2856,7 @@ function ListTab({ departments, items, itemByName, sizesByCategory, lockedDept }
               )}
               {sortedRows.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="px-2 py-6 text-center text-slate-400">
+                  <td colSpan={showBulk ? 10 : 9} className="px-2 py-6 text-center text-slate-400">
                     該当するデータがありません
                   </td>
                 </tr>
@@ -2719,6 +2864,7 @@ function ListTab({ departments, items, itemByName, sizesByCategory, lockedDept }
             </tbody>
           </table>
         </div>
+        </>
       )}
     </div>
   );
@@ -2995,7 +3141,7 @@ function CleanupSection({ onDeleted }) {
 // マスターファイルと修正依頼メモのうち、②に関係することをまとめた画面。
 // このファイルは公開されているため、個人のメールアドレス・パスワードの保管場所・
 // 共有サーバーの場所などは書かない（それらはマスターファイルを見る）。
-const SETTINGS_INFO_DATE = "2026年10月24日";
+const SETTINGS_INFO_DATE = "2026年11月2日";
 
 function SettingsLink({ href, children }) {
   return (
@@ -3460,6 +3606,7 @@ function SettingsTab({ departments }) {
             "「一覧」の表の見出し（日付・部署・氏名・品名・サイズ・数量・単価・現況）は、列の真ん中に置いています。表は画面の高さの4分の3ほどの枠の中で上下に動き、下へずらしても見出しの行が上に残って見えます（2026年10月14日〜）。表の中の文字の並び（左寄せ、数量・単価は右寄せ）は今までどおりです。",
             "「入力」画面（2026年10月24日〜）：部署用URLでは、表の上の「📱 スマホ」「💻 パソコン」の2つのボタンで表示を切り替えます（選んでいる方が色付き。開いたときは「スマホ」。それまでは「スマホ表示：ON／OFF」の1つのボタンでした）。「スマホ」のときは、表ではなく1件ずつのカード（「1件目」「2件目」…）に、「氏名」「班　係」「分類」「品名」「サイズ」「数量」を何行かに分けて並べます（氏名と班係、サイズと数量は横に2つ。分類・品名は1行ずつ。カードの右上に「削除」。2026年10月24日〜）。2件目からの件には「📋 ほかの件から写す」（パソコン・管理者用URLは表の右の「写す」。1件目には出ない）があり、押すと「どの件から写しますか」（自分より前の件のボタン。2件目では1件目だけ、3件目では1件目・2件目…。最初は1件目）と、氏名・班係・分類・品名・サイズ・数量のチェックが出て、選んだ件から選んだ項目だけを写せます（品名を写すときは分類も一緒に写す。写したあとは自由に直せる。チェックの選び方は次に開いたときも残る。2026年10月25日〜。10月24日に付けた「同上」のチェックは、利用者の希望で10月25日になくしました）。氏名は必須です（2026年10月25日〜。品名を入れた件に氏名が無いと申し込めず、「○件目に氏名がありません」と出て、その氏名の欄が赤くなります。見出しに赤い字で「※必須」）。「パソコン」にすると、管理者用URLと同じく学生・単価・備考・引継の欄も出ます。表の見出しは欄の真ん中に置いています。どちらも、上の「申込者」「入力者」の欄はなくし、「班　係」は上の欄から表の中（氏名と分類の間。1行ごとに入力）へ移しました（それまでに入力された申込者・入力者のデータは消していません）。",
             "「一覧」画面（2026年10月25日〜）：部署用URLでは、入力画面と同じ「📱 スマホ」「💻 パソコン」の2つのボタンがあります（開いたときは「スマホ」）。「スマホ」のときは、1件ずつのカードで、日付・現況（右上）、品名、氏名・班係、サイズ・数量・単価、「編集」「削除」を何行かに分けて並べます（品名・氏名の文字は、班係・サイズ・単価と同じ大きさ）。申込済は黄色、発注済は青の枠と色です。上の絞り込みの欄は2列に並べます。「編集」を押すと、そのカードが入力の欄に変わります。「パソコン」と管理者用URLは今までどおりの表です。",
+            "「一覧」で何件か選んで現況をまとめて変える（2026年11月2日〜。管理者用URLの表だけ）：表のいちばん左のチェックで記録を選び（見出しのチェックで表示している全部。Shift を押しながら押すと、前に押した行からその行までをまとめて選べます）、表の上の帯で現況を選んで「まとめて保存」を押すと、確かめのあとで選んだ記録の現況だけを書き換えます。ほかの欄は変わりません。部署用URL（`?dept=`）には出しません。",
             "集計画面はメニューから外しています（プログラムの中に部品は残っていますが、使われていません）。",
             "残っている作業：実際に配っている部署用URLを、マスターファイルに書き込む（上の「このアプリのURL」が参考になります）。",
           ]}
