@@ -3607,6 +3607,7 @@ function SettingsTab({ departments }) {
             "「入力」画面（2026年10月24日〜）：部署用URLでは、表の上の「📱 スマホ」「💻 パソコン」の2つのボタンで表示を切り替えます（選んでいる方が色付き。開いたときは「スマホ」。それまでは「スマホ表示：ON／OFF」の1つのボタンでした）。「スマホ」のときは、表ではなく1件ずつのカード（「1件目」「2件目」…）に、「氏名」「班　係」「分類」「品名」「サイズ」「数量」を何行かに分けて並べます（氏名と班係、サイズと数量は横に2つ。分類・品名は1行ずつ。カードの右上に「削除」。2026年10月24日〜）。2件目からの件には「📋 ほかの件から写す」（パソコン・管理者用URLは表の右の「写す」。1件目には出ない）があり、押すと「どの件から写しますか」（自分より前の件のボタン。2件目では1件目だけ、3件目では1件目・2件目…。最初は1件目）と、氏名・班係・分類・品名・サイズ・数量のチェックが出て、選んだ件から選んだ項目だけを写せます（品名を写すときは分類も一緒に写す。写したあとは自由に直せる。チェックの選び方は次に開いたときも残る。2026年10月25日〜。10月24日に付けた「同上」のチェックは、利用者の希望で10月25日になくしました）。氏名は必須です（2026年10月25日〜。品名を入れた件に氏名が無いと申し込めず、「○件目に氏名がありません」と出て、その氏名の欄が赤くなります。見出しに赤い字で「※必須」）。「パソコン」にすると、管理者用URLと同じく学生・単価・備考・引継の欄も出ます。表の見出しは欄の真ん中に置いています。どちらも、上の「申込者」「入力者」の欄はなくし、「班　係」は上の欄から表の中（氏名と分類の間。1行ごとに入力）へ移しました（それまでに入力された申込者・入力者のデータは消していません）。",
             "「一覧」画面（2026年10月25日〜）：部署用URLでは、入力画面と同じ「📱 スマホ」「💻 パソコン」の2つのボタンがあります（開いたときは「スマホ」）。「スマホ」のときは、1件ずつのカードで、日付・現況（右上）、品名、氏名・班係、サイズ・数量・単価、「編集」「削除」を何行かに分けて並べます（品名・氏名の文字は、班係・サイズ・単価と同じ大きさ）。申込済は黄色、発注済は青の枠と色です。上の絞り込みの欄は2列に並べます。「編集」を押すと、そのカードが入力の欄に変わります。「パソコン」と管理者用URLは今までどおりの表です。",
             "「一覧」で何件か選んで現況をまとめて変える（2026年11月2日〜。管理者用URLの表だけ）：表のいちばん左のチェックで記録を選び（見出しのチェックで表示している全部。Shift を押しながら押すと、前に押した行からその行までをまとめて選べます）、表の上の帯で現況を選んで「まとめて保存」を押すと、確かめのあとで選んだ記録の現況だけを書き換えます。ほかの欄は変わりません。部署用URL（`?dept=`）には出しません。",
+            "購入の単価は税抜で入れます（2026年11月2日〜。それまでは税込）。購入入力の単価の自動入力は、前回の単価、なければ品目マスタの単価（税込）を税抜にした値（1.1で割って1円未満を四捨五入）。請求書照合では、業者ごとのシステム集計（税抜）に消費税（10％・1円未満は切り捨て）を足した「合計（税込）」を請求書の金額とくらべます（差額＝請求書−合計）。品目マスタ・貸与の記録の単価は今までどおり税込です。それまでに入っていた購入の記録4件は、同日に税抜の単価に直しました。",
             "集計画面はメニューから外しています（プログラムの中に部品は残っていますが、使われていません）。",
             "残っている作業：実際に配っている部署用URLを、マスターファイルに書き込む（上の「このアプリのURL」が参考になります）。",
           ]}
@@ -3978,6 +3979,11 @@ async function fetchAllInvoices(filter) {
   return all;
 }
 
+// 消費税の率（10％）。購入の単価は税抜で入れ、請求書照合で業者ごとに消費税を足す（2026年11月2日〜）
+const PURCHASE_TAX_RATE = 0.1;
+// 消費税（1円未満は切り捨て）。小数の誤差が出ないよう、いったん100倍の整数にしてから計算する
+const purchaseTax = (amount) => Math.floor(Math.round(Number(amount || 0) * 100) * PURCHASE_TAX_RATE / 100 + 1e-9);
+
 // 今月1日（日本時間、"YYYY-MM-DD"）。請求書照合の期間の最初の値に使う
 const monthStartStr = () => todayStr().slice(0, 8) + "01";
 
@@ -4072,7 +4078,8 @@ function PurchaseInputTab({ items, itemByName, sizesByCategory, editing, onEditD
     return (it && it.category && sizesByCategory[it.category]) || [];
   };
 
-  // 単価の自動入力：同じ業者・同じ品名の前回の単価 → 品目マスタの単価（税込）の順で探す
+  // 単価の自動入力：同じ業者・同じ品名の前回の単価 → 品目マスタの単価（税込）を税抜にした値 の順で探す
+  // （購入の単価は2026年11月2日から税抜で入れる。消費税は請求書照合で業者ごとにまとめて足す）
   const suggestPrice = (v, itemName) => {
     const vv = (v || "").trim();
     const n = (itemName || "").trim();
@@ -4080,7 +4087,11 @@ function PurchaseInputTab({ items, itemByName, sizesByCategory, editing, onEditD
     const last = history.find((r) => r.item_name === n && (!vv || r.vendor_name === vv) && r.unit_price != null);
     if (last) return { price: last.unit_price, hint: `前回（${toWareki(last.purchase_date)}・${last.vendor_name}）の単価` };
     const it = itemByName[n];
-    if (it && it.unit_price_incl_tax != null) return { price: it.unit_price_incl_tax, hint: "品目マスタの単価（税込）" };
+    if (it && it.unit_price_incl_tax != null)
+      return {
+        price: Math.round(Number(it.unit_price_incl_tax) / (1 + PURCHASE_TAX_RATE)),
+        hint: `品目マスタの単価（税込 ${yen(it.unit_price_incl_tax)}円）を税抜にした値`,
+      };
     return { price: null, hint: "単価が見つかりません。手で入力してください" };
   };
 
@@ -4173,7 +4184,7 @@ function PurchaseInputTab({ items, itemByName, sizesByCategory, editing, onEditD
         // 何点あっても1回でまとめて登録する（途中で失敗したときは1件も登録されない）
         await sb("lending_purchases", { method: "POST", prefer: "return=minimal", body: bodies });
         setMessage(
-          `${bodies.length}点（合計 ${yen(totalAmount)} 円）を登録しました。続けて入力できます（購入日と業者はそのまま残しています）。`
+          `${bodies.length}点（合計 ${yen(totalAmount)} 円・税抜）を登録しました。続けて入力できます（購入日と業者はそのまま残しています）。`
         );
         clearForm(true);
       }
@@ -4240,8 +4251,8 @@ function PurchaseInputTab({ items, itemByName, sizesByCategory, editing, onEditD
               <th className="px-2 py-2 text-left">品名</th>
               <th className="px-2 py-2 text-left w-24">サイズ</th>
               <th className="px-2 py-2 text-left w-16">数量</th>
-              <th className="px-2 py-2 text-left w-28">単価（税込）</th>
-              <th className="px-2 py-2 text-right w-24">金額</th>
+              <th className="px-2 py-2 text-left w-28">単価（税抜）</th>
+              <th className="px-2 py-2 text-right w-24">金額（税抜）</th>
               <th className="px-2 py-2 text-left w-32">備考</th>
               <th className="px-2 py-2 w-8"></th>
             </tr>
@@ -4336,7 +4347,7 @@ function PurchaseInputTab({ items, itemByName, sizesByCategory, editing, onEditD
           <span />
         )}
         <span className="text-sm text-slate-700">
-          {filledRows.length}点 ／ 合計 <strong>{yen(totalAmount)}</strong> 円
+          {filledRows.length}点 ／ 合計（税抜） <strong>{yen(totalAmount)}</strong> 円
         </span>
       </div>
       {!editingId && <p className="text-xs text-slate-500 mb-3">品名が空の行は登録しません。行が足りないときは「＋ 行を追加」を押してください。</p>}
@@ -4363,7 +4374,7 @@ function PurchaseInputTab({ items, itemByName, sizesByCategory, editing, onEditD
               <th className="px-2 py-2 text-left">品名</th>
               <th className="px-2 py-2 text-left">サイズ</th>
               <th className="px-2 py-2 text-right">数量</th>
-              <th className="px-2 py-2 text-right">金額</th>
+              <th className="px-2 py-2 text-right">金額（税抜）</th>
             </tr>
           </thead>
           <tbody>
@@ -4484,7 +4495,7 @@ function PurchaseListTab({ onEdit }) {
       {error && <p className="text-sm text-red-600 mb-3">{error}</p>}
 
       <div className="mb-2 text-sm text-slate-700">
-        {loading ? "読み込み中..." : `${shown.length}件 ／ 金額合計 ${yen(total)} 円`}
+        {loading ? "読み込み中..." : `${shown.length}件 ／ 金額合計（税抜） ${yen(total)} 円`}
       </div>
       {!loading && byVendor.length > 1 && (
         <div className="mb-3 text-xs text-slate-500">
@@ -4501,8 +4512,8 @@ function PurchaseListTab({ onEdit }) {
               <th className="px-2 py-2 text-left">品名</th>
               <th className="px-2 py-2 text-left">サイズ</th>
               <th className="px-2 py-2 text-right">数量</th>
-              <th className="px-2 py-2 text-right">単価</th>
-              <th className="px-2 py-2 text-right">金額</th>
+              <th className="px-2 py-2 text-right">単価（税抜）</th>
+              <th className="px-2 py-2 text-right">金額（税抜）</th>
               <th className="px-2 py-2 text-left">備考</th>
               <th className="px-2 py-2"></th>
             </tr>
@@ -4663,17 +4674,22 @@ function InvoiceTab() {
     }
   };
 
+  // 消費税は業者ごとに「システム集計 × 10％（1円未満切り捨て）」で計算し、合計（税込）を請求書の金額とくらべる（2026年11月2日〜）
   let sysTotal = 0;
+  let taxTotal = 0;
   let billedTotal = 0;
   let anyBilled = false;
   vendors.forEach((v) => {
-    sysTotal += sysByVendor[v] ? sysByVendor[v].amount : 0;
+    const a = sysByVendor[v] ? sysByVendor[v].amount : 0;
+    sysTotal += a;
+    taxTotal += purchaseTax(a);
     if (invByVendor[v]) {
       billedTotal += Number(invByVendor[v].amount);
       anyBilled = true;
     }
   });
-  const grandDiff = billedTotal - sysTotal;
+  const inclTotal = sysTotal + taxTotal;
+  const grandDiff = billedTotal - inclTotal;
   const okStyle = { color: "#15803d", fontWeight: 700 };
   const ngStyle = { color: "#b91c1c", fontWeight: 700 };
   const cardStyle = { border: "1px solid #e2e8f0", borderRadius: "8px", padding: "10px 14px", background: "#fff", minWidth: "200px" };
@@ -4700,7 +4716,7 @@ function InvoiceTab() {
         </Field>
       </div>
       <p className="text-xs text-slate-500 mb-3">
-        指定した期間の「購入入力」の記録を業者ごとに合計し、請求書の金額と突き合わせます。請求書の金額は、期間の終わりの日が入っている月の請求分として保存されます
+        指定した期間の「購入入力」の記録を業者ごとに合計し（税抜）、消費税（10％）を足した「合計（税込）」を請求書の金額と突き合わせます。請求書の金額は、期間の終わりの日が入っている月の請求分として保存されます
         {validPeriod ? `（今の設定では ${Number(year)}年${Number(month)}月分）` : ""}。金額を入れて、欄の外を押すか Enter キーを押すと保存されます。
       </p>
 
@@ -4714,7 +4730,9 @@ function InvoiceTab() {
             <tr>
               <th className="px-2 py-2 text-left">業者</th>
               <th className="px-2 py-2 text-right">件数</th>
-              <th className="px-2 py-2 text-right">システム集計</th>
+              <th className="px-2 py-2 text-right">システム集計（税抜）</th>
+              <th className="px-2 py-2 text-right">消費税（10％）</th>
+              <th className="px-2 py-2 text-right">合計（税込）</th>
               <th className="px-2 py-2 text-right">請求書金額</th>
               <th className="px-2 py-2 text-right">差額</th>
               <th className="px-2 py-2 text-center">判定</th>
@@ -4724,20 +4742,22 @@ function InvoiceTab() {
           <tbody>
             {loading && (
               <tr>
-                <td colSpan={7} className="px-2 py-2 text-slate-500">読み込み中...</td>
+                <td colSpan={9} className="px-2 py-2 text-slate-500">読み込み中...</td>
               </tr>
             )}
             {!loading && validPeriod && vendors.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-2 py-2 text-slate-500">この期間の購入の記録がありません</td>
+                <td colSpan={9} className="px-2 py-2 text-slate-500">この期間の購入の記録がありません</td>
               </tr>
             )}
             {!loading &&
               vendors.map((v) => {
                 const sys = sysByVendor[v] || { amount: 0, count: 0, rows: [] };
                 const inv = invByVendor[v];
+                const tax = purchaseTax(sys.amount);
+                const incl = sys.amount + tax;
                 const billed = inv ? Number(inv.amount) : null;
-                const diff = billed === null ? null : billed - sys.amount;
+                const diff = billed === null ? null : billed - incl;
                 const st = billed === null ? {} : diff === 0 ? okStyle : ngStyle;
                 const draft = drafts[v];
                 return (
@@ -4746,6 +4766,8 @@ function InvoiceTab() {
                       <td className="px-2 py-1.5">{v}</td>
                       <td className="px-2 py-1.5 text-right">{sys.count}件</td>
                       <td className="px-2 py-1.5 text-right">{yen(sys.amount)}円</td>
+                      <td className="px-2 py-1.5 text-right">{yen(tax)}円</td>
+                      <td className="px-2 py-1.5 text-right" style={{ fontWeight: 600 }}>{yen(incl)}円</td>
                       <td className="px-2 py-1.5 text-right">
                         <input
                           type="text"
@@ -4783,7 +4805,7 @@ function InvoiceTab() {
                     </tr>
                     {openVendor === v && (
                       <tr className="bg-slate-50">
-                        <td colSpan={7} className="px-3 py-2">
+                        <td colSpan={9} className="px-3 py-2">
                           <table className="w-full text-xs">
                             <thead className="text-slate-500">
                               <tr>
@@ -4791,8 +4813,8 @@ function InvoiceTab() {
                                 <th className="px-2 py-1 text-left">品名</th>
                                 <th className="px-2 py-1 text-left">サイズ</th>
                                 <th className="px-2 py-1 text-right">数量</th>
-                                <th className="px-2 py-1 text-right">単価</th>
-                                <th className="px-2 py-1 text-right">金額</th>
+                                <th className="px-2 py-1 text-right">単価（税抜）</th>
+                                <th className="px-2 py-1 text-right">金額（税抜）</th>
                                 <th className="px-2 py-1 text-left">備考</th>
                               </tr>
                             </thead>
@@ -4827,11 +4849,19 @@ function InvoiceTab() {
             <div style={{ fontSize: "18px", fontWeight: 600 }}>{yen(billedTotal)}円</div>
           </div>
           <div style={cardStyle}>
-            <div className="text-xs text-slate-500">システム集計合計（{toWareki(from)} 〜 {toWareki(to)}）</div>
+            <div className="text-xs text-slate-500">システム集計合計（税抜。{toWareki(from)} 〜 {toWareki(to)}）</div>
             <div style={{ fontSize: "18px", fontWeight: 600 }}>{yen(sysTotal)}円</div>
           </div>
           <div style={cardStyle}>
-            <div className="text-xs text-slate-500">差額（請求書 − システム）</div>
+            <div className="text-xs text-slate-500">消費税合計（10％）</div>
+            <div style={{ fontSize: "18px", fontWeight: 600 }}>{yen(taxTotal)}円</div>
+          </div>
+          <div style={cardStyle}>
+            <div className="text-xs text-slate-500">合計（システム集計＋消費税）</div>
+            <div style={{ fontSize: "18px", fontWeight: 600 }}>{yen(inclTotal)}円</div>
+          </div>
+          <div style={cardStyle}>
+            <div className="text-xs text-slate-500">差額（請求書 − 合計）</div>
             <div style={{ fontSize: "18px", ...(anyBilled ? (grandDiff === 0 ? okStyle : ngStyle) : { fontWeight: 600 }) }}>
               {anyBilled ? (grandDiff > 0 ? "+" : "") + yen(grandDiff) + "円" : "-"}
             </div>
@@ -4839,7 +4869,7 @@ function InvoiceTab() {
         </div>
       )}
       <p className="text-xs text-slate-500 mt-2" style={{ marginTop: "12px" }}>
-        ※単価は税込で入力しています。請求書の消費税を合計金額でまとめて計算している場合、1円〜数円の差が出ることがあります。
+        ※購入の単価は税抜で入力します（2026年11月2日〜）。消費税（10％・1円未満は切り捨て）は業者ごとにシステム集計から計算し、「合計（税込）」を請求書の金額とくらべます。請求書が品物ごとに消費税を計算している場合は、1円〜数円の差が出ることがあります。
       </p>
     </div>
   );
