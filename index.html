@@ -1571,6 +1571,9 @@ function InputTab({ departments, items, itemByName, sizesByCategory, lockedDept 
   };
 
   const handleTypeChange = (key, type) => {
+    // 氏名が空のまま分類を選んだときは、知らせを出す（2026年11月13日〜。選んだ分類はそのまま残す）
+    const cur = rows.find((r) => r.key === key);
+    if (type && cur && !(cur.personName || "").trim()) window.alert("名前を入力してください");
     updateRow(key, { itemType: type, itemName: "", unitPrice: "", size: "" });
   };
 
